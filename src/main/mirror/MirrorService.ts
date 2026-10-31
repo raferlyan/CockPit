@@ -5,6 +5,7 @@ import type { Device } from '@shared/models'
 import { IpcChannel } from '@shared/ipc'
 import type { AdbClient } from '../adb/AdbClient'
 import { MirrorSession } from './MirrorSession'
+import { watchOwner } from '../util/ownerLifetime'
 
 interface Entry {
   session: MirrorSession
@@ -40,13 +41,13 @@ export class MirrorService {
         this.emit(owner, { sessionId, type: 'clipboard', text })
       })()
     })
+    const unwatch = watchOwner(owner, () => session.stop())
     session.on('closed', (error) => {
+      unwatch()
       this.sessions.delete(sessionId)
       port1.close()
       this.emit(owner, { sessionId, type: 'state', state: error ? 'error' : 'stopped', error: error?.message })
     })
-
-    owner.once('destroyed', () => session.stop())
 
     await session.start()
     this.emit(owner, { sessionId, type: 'state', state: 'running' })

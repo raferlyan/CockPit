@@ -1021,3 +1021,117 @@ button {
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* ---------- 多设备投屏 ---------- */
+
+.mirror-area {
+  display: flex;
+  flex-direction: column;
+}
+
+.mirror-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 4px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.mirror-bar .spacer {
+  flex: 1;
+}
+
+.mirror-add {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 2px 6px;
+  font: inherit;
+}
+
+.mirror-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 1), minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 1px;
+  background: var(--border);
+}
+
+.mirror-grid > * {
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.mirror-empty,
+.mirror-offline {
+  grid-column: 1 / -1;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mirror-offline {
+  grid-column: auto;
+}
+
+.mirror {
+  container-type: inline-size;
+  min-width: 0;
+  outline: 1px solid transparent;
+  outline-offset: -1px;
+}
+
+/* 网格里的焦点窗格 */
+.mirror.active {
+  outline-color: var(--accent);
+}
+
+.mirror.active .mirror-title {
+  color: var(--accent);
+}
+
+.mirror-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.mirror-close {
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+
+.label-short {
+  display: none;
+}
+
+/* 窗格较窄时（多台并排）工具栏改用短标签 */
+@container (max-width: 620px) {
+  .mirror-toolbar {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .mirror-toolbar .label-full {
+    display: none;
+  }
+
+  .mirror-toolbar .label-short {
+    display: inline;
+  }
+
+  .mirror-toolbar .tool {
+    padding: 2px 5px;
+  }
+
+  .mirror-meta {
+    display: none;
+  }
+}

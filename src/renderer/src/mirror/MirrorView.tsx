@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
-import type { ControlInput, MirrorSessionInfo } from '@shared/mirror'
+import type { ControlInput, MirrorOptions, MirrorSessionInfo } from '@shared/mirror'
 import type { Device } from '@shared/models'
 import { api } from '../api'
 import { ActionButton } from '../notify/ActionButton'
@@ -22,7 +22,25 @@ function isShortcut(e: { metaKey: boolean; ctrlKey: boolean }): boolean {
   return isMac ? e.metaKey : e.ctrlKey
 }
 
-export function MirrorView({ device }: { device: Device }) {
+/**
+ * 多台同时投屏时降低分辨率、码率和帧率，减轻 USB 带宽和解码压力。
+ * 在开始投屏时按当时的窗格数决定，已在投屏的会话不受影响。
+ */
+const GRID_OPTIONS: MirrorOptions = { maxSize: 1024, videoBitRate: 4_000_000, maxFps: 30 }
+
+interface MirrorViewProps {
+  device: Device
+  /** 焦点设备，网格里高亮显示 */
+  active: boolean
+  /** 单台模式下非焦点窗格隐藏：会话继续，只是不绘制 */
+  hidden: boolean
+  /** 投屏区不止一台设备 */
+  multi: boolean
+  onActivate(): void
+  onClose(): void
+}
+
+export function MirrorView({ device, active, hidden, multi, onActivate, onClose }: MirrorViewProps) {
   const [state, setState] = useState<ViewState>('idle')
   const [error, setError] = useState<string | null>(null)
   const [session, setSession] = useState<MirrorSessionInfo | null>(null)
@@ -37,6 +55,7 @@ export function MirrorView({ device }: { device: Device }) {
   const sessionIdRef = useRef<string | null>(null)
   const videoSizeRef = useRef<Size | null>(null)
   const composingRef = useRef(false)
+  const hiddenRef = useRef(hidden)
 
   const send = useCallback((input: ControlInput) => {
     const id = sessionIdRef.current
@@ -60,7 +79,7 @@ export function MirrorView({ device }: { device: Device }) {
     setState('starting')
     setError(null)
     try {
-      const info = await api.mirror.start(device.serial)
+      const info = await api.mirror.start(device.serial, multi ? GRID_OPTIONS : undefined)
       sessionIdRef.current = info.sessionId
       setSession(info)
       setState('running')
@@ -69,7 +88,7 @@ export function MirrorView({ device }: { device: Device }) {
       notify('error', '投屏启动失败', message)
       teardown('error', message)
     }
-  }, [device.serial, teardown])
+  }, [device.serial, multi, teardown])
 
   const stop = useCallback(() => {
     const id = sessionIdRef.current
@@ -137,6 +156,7 @@ export function MirrorView({ device }: { device: Device }) {
         const offscreen = canvas.transferControlToOffscreen()
         const init: WorkerInbound = { type: 'init', canvas: offscreen, port }
         worker.postMessage(init, [offscreen, port])
+        if (hiddenRef.current) worker.postMessage({ type: 'visible', visible: false } satisfies WorkerInbound)
         imeRef.current?.focus()
       })
       .catch((err: Error) => {
@@ -180,6 +200,7 @@ export function MirrorView({ device }: { device: Device }) {
   }
 
   const onPointerDown = (e: PointerEvent<HTMLCanvasElement>) => {
+    onActivate()
     imeRef.current?.focus()
     e.preventDefault()
     if (e.button === 0) {
@@ -286,6 +307,15 @@ export function MirrorView({ device }: { device: Device }) {
     return () => clearTimeout(timer)
   }, [state, videoSize])
 
+  // 隐藏时让 Worker 停止绘制；重新可见时请求关键帧，否则静止画面会一直停在旧帧。
+  // 只在可见性变化时触发：resetVideo 会让服务端重发尺寸，若依赖尺寸会形成无限重置
+  useEffect(() => {
+    if (hiddenRef.current === hidden) return
+    hiddenRef.current = hidden
+    workerRef.current?.postMessage({ type: 'visible', visible: !hidden } satisfies WorkerInbound)
+    if (!hidden) send({ type: 'resetVideo' })
+  }, [hidden, send])
+
   /* ---------------- 渲染 ---------------- */
 
   let canvasStyle: { width: number; height: number } | undefined
@@ -298,9 +328,11 @@ export function MirrorView({ device }: { device: Device }) {
   const keysDisabled = state === 'starting' ? STARTING_REASON : !running && '先点「开始投屏」，投屏后才能操作设备'
 
   return (
-    <div className="mirror">
+    <div className={`mirror${active && multi ? ' active' : ''}`} style={hidden ? { display: 'none' } : undefined} onMouseDownCapture={onActivate}>
       <div className="mirror-toolbar">
-        <span className="mirror-title">{deviceTitle(device)}</span>
+        <span className="mirror-title" title={deviceTitle(device)}>
+          {deviceTitle(device)}
+        </span>
         {running && videoSize && (
           <span className="mirror-meta mono">
             {videoSize.width}×{videoSize.height} · {fps} fps
@@ -308,14 +340,14 @@ export function MirrorView({ device }: { device: Device }) {
         )}
         <span className="spacer" />
         <div className="mirror-keys">
-          <ToolButton label="返回" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.BACK)} />
-          <ToolButton label="主页" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.HOME)} />
-          <ToolButton label="多任务" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.APP_SWITCH)} />
-          <ToolButton label="音量+" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.VOLUME_UP)} />
-          <ToolButton label="音量-" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.VOLUME_DOWN)} />
-          <ToolButton label="电源" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.POWER)} />
-          <ToolButton label="通知栏" disabledReason={keysDisabled} onClick={() => send({ type: 'expandNotificationPanel' })} />
-          <ToolButton label="旋转" disabledReason={keysDisabled} onClick={() => send({ type: 'rotateDevice' })} />
+          <ToolButton label="返回" short="◁" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.BACK)} />
+          <ToolButton label="主页" short="○" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.HOME)} />
+          <ToolButton label="多任务" short="▢" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.APP_SWITCH)} />
+          <ToolButton label="音量+" short="音+" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.VOLUME_UP)} />
+          <ToolButton label="音量-" short="音−" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.VOLUME_DOWN)} />
+          <ToolButton label="电源" short="电源" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.POWER)} />
+          <ToolButton label="通知栏" short="通知" disabledReason={keysDisabled} onClick={() => send({ type: 'expandNotificationPanel' })} />
+          <ToolButton label="旋转" short="⟳" disabledReason={keysDisabled} onClick={() => send({ type: 'rotateDevice' })} />
         </div>
         {running || state === 'starting' ? (
           <ActionButton className="secondary" onClick={stop} disabledReason={state === 'starting' && STARTING_REASON}>
@@ -323,9 +355,13 @@ export function MirrorView({ device }: { device: Device }) {
           </ActionButton>
         ) : (
           <button className="primary" onClick={() => void start()}>
-            开始投屏
+            <span className="label-full">开始投屏</span>
+            <span className="label-short">投屏</span>
           </button>
         )}
+        <button className="tool mirror-close" title="关闭窗格（同时停止投屏）" onClick={onClose}>
+          ×
+        </button>
       </div>
 
       <div className="mirror-stage" ref={stageRef}>
@@ -366,11 +402,20 @@ export function MirrorView({ device }: { device: Device }) {
 const STARTING_REASON = '投屏正在启动，请稍候'
 const NO_FRAME_TIMEOUT = 8_000
 
-function ToolButton({ label, onClick, disabledReason }: { label: string; onClick(): void; disabledReason?: string | false }) {
+interface ToolButtonProps {
+  label: string
+  /** 窗格较窄时显示的短标签 */
+  short: string
+  onClick(): void
+  disabledReason?: string | false
+}
+
+function ToolButton({ label, short, onClick, disabledReason }: ToolButtonProps) {
   return (
     // 按下时不抢焦点，键盘输入仍留在投屏上
-    <ActionButton className="tool" onClick={onClick} disabledReason={disabledReason} onMouseDown={(e) => e.preventDefault()}>
-      {label}
+    <ActionButton className="tool" title={label} onClick={onClick} disabledReason={disabledReason} onMouseDown={(e) => e.preventDefault()}>
+      <span className="label-full">{label}</span>
+      <span className="label-short">{short}</span>
     </ActionButton>
   )
 }

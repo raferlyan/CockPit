@@ -7,7 +7,10 @@ import { h264CodecString } from './codecString'
  * 页面主线程只负责布局和输入，不经手视频数据。
  */
 
-export type WorkerInbound = { type: 'init'; canvas: OffscreenCanvas; port: MessagePort }
+export type WorkerInbound =
+  | { type: 'init'; canvas: OffscreenCanvas; port: MessagePort }
+  /** 窗格隐藏时继续解码（保持参考帧）但不绘制；重新可见时页面会请求关键帧刷新画面 */
+  | { type: 'visible'; visible: boolean }
 
 export type WorkerOutbound =
   | { type: 'session'; width: number; height: number }
@@ -27,6 +30,7 @@ let configuredCodec: string | undefined
 let pendingConfig: Uint8Array | undefined
 let waitingKeyframe = true
 let frames = 0
+let visible = true
 
 const post = (msg: WorkerOutbound) => self.postMessage(msg)
 
@@ -37,9 +41,11 @@ function createDecoder(): VideoDecoder {
         canvas.width = frame.displayWidth
         canvas.height = frame.displayHeight
       }
-      ctx.drawImage(frame, 0, 0)
+      if (visible) {
+        ctx.drawImage(frame, 0, 0)
+        frames++
+      }
       frame.close()
-      frames++
     },
     error: (err) => {
       post({ type: 'error', message: err.message })
@@ -111,7 +117,10 @@ function onVideo(msg: VideoMessage): void {
 }
 
 self.onmessage = (event: MessageEvent<WorkerInbound>) => {
-  if (event.data.type !== 'init') return
+  if (event.data.type === 'visible') {
+    visible = event.data.visible
+    return
+  }
   canvas = event.data.canvas
   ctx = canvas.getContext('2d', { alpha: false, desynchronized: true })!
   event.data.port.onmessage = (e: MessageEvent<VideoMessage>) => onVideo(e.data)

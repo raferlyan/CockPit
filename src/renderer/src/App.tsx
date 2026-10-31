@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
-import { connectStore, useAppStore } from './store'
-import { MirrorView } from './mirror/MirrorView'
+import { connectStore } from './store'
+import { MirrorGrid } from './mirror/MirrorGrid'
 import { DeviceList } from './components/DeviceList'
 import { DeviceDetail } from './components/DeviceDetail'
 import { AdbStatusBar } from './components/AdbStatusBar'
@@ -16,7 +16,6 @@ export function App() {
   useEffect(() => connectStore(), [])
   useEffect(() => connectTerminals(), [])
   useEffect(() => connectMetrics(), [])
-  const focused = useAppStore((s) => s.devices.find((d) => d.serial === s.focusedSerial))
 
   return (
     <div className="app">
@@ -24,11 +23,9 @@ export function App() {
         <DeviceList />
       </ErrorBoundary>
       <main className="workspace">
-        <section className={`mirror-area${focused?.state === 'device' ? '' : ' placeholder'}`}>
-          <ErrorBoundary name="投屏">
-            {focused?.state === 'device' ? <MirrorView key={focused.serial} device={focused} /> : '选择一台在线设备开始投屏'}
-          </ErrorBoundary>
-        </section>
+        <ErrorBoundary name="投屏区" className="mirror-area">
+          <MirrorGrid />
+        </ErrorBoundary>
         <aside className="side-panels">
           <ErrorBoundary name="设备信息" className="panel">
             <DeviceDetail />

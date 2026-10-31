@@ -5,6 +5,7 @@ import { IpcChannel } from '@shared/ipc'
 import type { Device } from '@shared/models'
 import type { TerminalEvent, TerminalIdentity, TerminalOpenOptions, TerminalSessionInfo } from '@shared/terminal'
 import { detectIdentity } from './prompt'
+import { watchOwner } from '../util/ownerLifetime'
 
 /** 输出合并后再发给渲染进程，logcat 刷屏时避免每行一条 IPC */
 const FLUSH_INTERVAL = 16
@@ -55,13 +56,14 @@ export class ShellService {
       entry.flushTimer ??= setTimeout(() => this.flush(entry), FLUSH_INTERVAL)
       if (options.kind === 'shell') this.trackIdentity(entry, data)
     })
+    const unwatch = watchOwner(owner, () => this.close(info.id))
     proc.onExit(({ exitCode }) => {
+      unwatch()
       this.flush(entry)
       this.sessions.delete(info.id)
       this.emit(owner, { type: 'exit', id: info.id, code: exitCode, reason: entry.closeReason })
     })
 
-    owner.once('destroyed', () => this.close(info.id))
     return info
   }
 

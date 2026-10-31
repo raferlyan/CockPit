@@ -5,6 +5,7 @@ import { SerialPort } from 'serialport'
 import { IpcChannel } from '@shared/ipc'
 import type { SerialEnter, SerialOptions, SerialPortInfo } from '@shared/serial'
 import type { TerminalEvent, TerminalSessionInfo } from '@shared/terminal'
+import { watchOwner } from '../util/ownerLifetime'
 
 /** 与 ShellService 一致：合并输出后再发给渲染进程 */
 const FLUSH_INTERVAL = 16
@@ -60,7 +61,9 @@ export class SerialService {
     port.on('error', (error) => {
       entry.closeReason ??= error.message
     })
+    const unwatch = watchOwner(owner, () => this.close(info.id))
     port.on('close', (error?: Error & { disconnected?: boolean }) => {
+      unwatch()
       this.push(entry, entry.decoder.end())
       this.flush(entry)
       this.sessions.delete(info.id)
@@ -68,7 +71,6 @@ export class SerialService {
       this.emit(owner, { type: 'exit', id: info.id, code: 0, reason })
     })
 
-    owner.once('destroyed', () => this.close(info.id))
     return info
   }
 

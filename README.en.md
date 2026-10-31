@@ -21,6 +21,7 @@
   - Keyboard: type directly, including through an input method (IME) such as Chinese.
   - Clipboard: synced both ways between computer and device with Cmd/Ctrl+C and Cmd/Ctrl+V.
   - Toolbar: Back, Home, Recents, Volume, Power, Notifications, Rotate.
+  - Multiple devices: mirror up to 4 at once, in a side-by-side grid or one at a time. Switching devices doesn't interrupt the others, and resolution and bitrate drop automatically when more than one device is mirrored.
 - **adb terminal**: multiple tabs, with Tab completion, Ctrl+C, vi and other interactive programs working. Each tab shows the current identity: `$` for a normal user, `#` for root.
 - **logcat**: colored output, with optional filter arguments such as `-s ActivityManager` or `--pid=$(pidof -s com.example)`.
 - **Serial console**: talks to a device's debug UART through a USB-to-serial cable, no adb needed.
@@ -64,7 +65,6 @@ The installers are not signed with a developer certificate yet, so the OS will b
 
 ## Current limitations
 
-- Only one device can be mirrored at a time; mirroring several devices at once is in progress.
 - H.264 is the only supported video codec.
 - In progress:
   - Root authentication (su password prompts) and root-only metrics.
