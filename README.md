@@ -1,8 +1,18 @@
-# Cockpit
+<p align="center">
+  <img src="docs/assets/logo.svg" width="128" height="128" alt="Cockpit logo">
+</p>
 
-**中文** | [English](README.en.md)
+<h1 align="center">Cockpit</h1>
 
-Android 设备调试桌面工具，支持 macOS 与 Windows。在一个窗口里完成投屏操控、adb 终端、串口终端和设备负载监控。
+<p align="center">
+  Android 设备调试桌面工具：投屏操控、adb 终端、串口终端、设备负载监控，一个窗口搞定。<br>
+  支持 macOS 与 Windows。
+</p>
+
+<p align="center">
+  <b>中文</b> | <a href="README.en.md">English</a> ·
+  <a href="https://github.com/raferlyan/CockPit/releases/latest">下载</a>
+</p>
 
 ## 功能
 
@@ -82,6 +92,8 @@ ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ npm install
 | `npm run fetch-server` | 下载并校验 scrcpy-server |
 | `npm run package` | 构建未打包的应用目录到 `release/` |
 | `npm run dist:mac` / `npm run dist:win` | 生成安装包 |
+
+**应用图标**：源文件是 [docs/assets/logo.svg](docs/assets/logo.svg)。修改后执行 `npx electron scripts/render-icon.cjs`，重新生成打包用的 `build/icon.png`。
 
 **发布新版本**：修改 `package.json` 里的版本号，然后推送 `v` 开头的标签（如 `git tag v0.2.0 && git push origin v0.2.0`）。GitHub Actions 会构建 macOS 与 Windows 安装包，并发布到 Releases。
 

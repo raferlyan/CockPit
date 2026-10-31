@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>Cockpit</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232b38"/>
+      <stop offset="1" stop-color="#11151c"/>
+    </linearGradient>
+    <!-- 仪表弧：Android 绿到蓝 -->
+    <linearGradient id="arc" x1="0.85" y1="0.95" x2="0.6" y2="0">
+      <stop offset="0" stop-color="#3ddc84"/>
+      <stop offset="1" stop-color="#4c9aff"/>
+    </linearGradient>
+  </defs>
+  <!-- macOS 图标网格：824 内容区，四周留 100 -->
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)"/>
+  <rect x="101.5" y="101.5" width="821" height="821" rx="184.5" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="3"/>
+  <!-- 刻度 -->
+  <g stroke="#e3e6eb" stroke-opacity="0.35" stroke-width="14" stroke-linecap="round">
+    <line x1="512" y1="352" x2="512" y2="322"/>
+    <line x1="399" y1="399" x2="378" y2="378"/>
+    <line x1="352" y1="512" x2="322" y2="512"/>
+    <line x1="399" y1="625" x2="378" y2="646"/>
+    <line x1="512" y1="672" x2="512" y2="702"/>
+  </g>
+  <!-- C 形仪表弧，开口朝右 -->
+  <path d="M 703.5 351.3 A 250 250 0 1 0 703.5 672.7" fill="none" stroke="url(#arc)" stroke-width="88" stroke-linecap="round"/>
+  <!-- 指针指向右上的红线区 -->
+  <line x1="512" y1="512" x2="652" y2="414" stroke="#ffffff" stroke-width="36" stroke-linecap="round"/>
+  <circle cx="512" cy="512" r="48" fill="#ffffff"/>
+  <circle cx="512" cy="512" r="18" fill="#1a212c"/>
+</svg>

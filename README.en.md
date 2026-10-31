@@ -1,8 +1,18 @@
-# Cockpit
+<p align="center">
+  <img src="docs/assets/logo.svg" width="128" height="128" alt="Cockpit logo">
+</p>
 
-[中文](README.md) | **English**
+<h1 align="center">Cockpit</h1>
 
-Cockpit is a desktop toolkit for debugging Android devices, for macOS and Windows. One window gives you screen mirroring with control, adb terminals, a serial console and live device load monitoring.
+<p align="center">
+  A desktop toolkit for debugging Android devices: screen mirroring with control, adb terminals, a serial console and live device load monitoring, all in one window.<br>
+  For macOS and Windows.
+</p>
+
+<p align="center">
+  <a href="README.md">中文</a> | <b>English</b> ·
+  <a href="https://github.com/raferlyan/CockPit/releases/latest">Download</a>
+</p>
 
 ## Features
 
@@ -78,6 +88,8 @@ npm run dev
 | `npm run fetch-server` | Download and verify scrcpy-server |
 | `npm run package` | Build the unpacked app into `release/` |
 | `npm run dist:mac` / `npm run dist:win` | Build installers |
+
+**App icon**: the source is [docs/assets/logo.svg](docs/assets/logo.svg). After editing it, run `npx electron scripts/render-icon.cjs` to regenerate `build/icon.png`, which packaging uses.
 
 **Releasing**: bump the version in `package.json`, then push a tag starting with `v` (for example `git tag v0.2.0 && git push origin v0.2.0`). GitHub Actions builds the macOS and Windows installers and publishes them to Releases.
 
