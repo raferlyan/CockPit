@@ -13,11 +13,23 @@ extraResources:
 asarUnpack:
   - '**/*.node'
   - '**/node_modules/node-pty/**'
+# node-pty 与 serialport 自带各平台的 N-API 预编译文件，不需要按 Electron 重新编译
+npmRebuild: false
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+# 由发布工作流上传到 GitHub Release
+publish: null
 mac:
-  target: [dmg]
+  target:
+    - target: dmg
+      arch: [arm64, x64]
   category: public.app-category.developer-tools
+  # 没有开发者证书：ad-hoc 签名（Apple Silicon 上未签名的应用无法运行），不做公证
+  identity: '-'
+  hardenedRuntime: false
 win:
-  target: [nsis]
+  target:
+    - target: nsis
+      arch: [x64]
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

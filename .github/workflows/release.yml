@@ -1,0 +1,50 @@
+name: release
+
+# 推送 v* 标签时构建 macOS / Windows 安装包并发布到 GitHub Release
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            dist: dist:mac
+            files: release/*.dmg
+          - os: windows-latest
+            dist: dist:win
+            files: release/*.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run fetch-server
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - run: npm run ${{ matrix.dist }}
+        env:
+          # 没有签名证书，跳过自动查找
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.files }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
