@@ -1,0 +1,134 @@
+import { useState } from 'react'
+import { useAppStore } from '../store'
+import { deviceTitle } from '../labels'
+import { ActionButton } from '../notify/ActionButton'
+import { useTerminalStore, type TerminalTab } from './terminalStore'
+import { TerminalView } from './TerminalView'
+import { SerialDialog } from './SerialDialog'
+
+const LOGCAT_PLACEHOLDER = '可选参数，如 -s ActivityManager 或 --pid=$(pidof -s com.example)'
+
+export function TerminalPanel() {
+  const { tabs, activeId, open, openSerial, close, reopen, activate } = useTerminalStore()
+  const devices = useAppStore((s) => s.devices)
+  const focused = useAppStore((s) => s.devices.find((d) => d.serial === s.focusedSerial))
+  const canOpen = focused?.state === 'device'
+  const noDeviceReason = !canOpen && (focused ? '当前设备不在线，无法打开 adb 终端' : '先在左侧选择一台在线设备')
+  const [logcatArgs, setLogcatArgs] = useState<string | null>(null)
+  const [serialOpen, setSerialOpen] = useState(false)
+
+  const titleOf = (tab: TerminalTab) => {
+    if (tab.port) return `串口 ${tab.port.path.split(/[\\/]/).pop()} · ${tab.port.baudRate}`
+    const device = devices.find((d) => d.serial === tab.serial)
+    return `${device ? deviceTitle(device) : tab.serial} · ${tab.kind}`
+  }
+  const active = tabs.find((t) => t.id === activeId)
+
+  const submitLogcat = () => {
+    if (focused) void open(focused.serial, 'logcat', logcatArgs ?? '')
+    setLogcatArgs(null)
+  }
+
+  return (
+    <section className="terminal-area">
+      <div className="terminal-tabs">
+        {tabs.map((tab) => (
+          <div
+            key={tab.id}
+            className={`terminal-tab${tab.id === activeId ? ' active' : ''}${tab.exit ? ' exited' : ''}`}
+            onClick={() => activate(tab.id)}
+            title={tab.logcatArgs ? `logcat ${tab.logcatArgs}` : tab.port?.path}
+          >
+            <span className="terminal-tab-title">{titleOf(tab)}</span>
+            {tab.kind === 'shell' && <IdentityMark tab={tab} />}
+            <button
+              className="terminal-tab-close"
+              title="关闭"
+              onClick={(e) => {
+                e.stopPropagation()
+                close(tab.id)
+              }}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <div className="spacer" />
+        {logcatArgs !== null ? (
+          <form
+            className="logcat-form"
+            onSubmit={(e) => {
+              e.preventDefault()
+              submitLogcat()
+            }}
+          >
+            <input
+              autoFocus
+              className="mono"
+              value={logcatArgs}
+              placeholder={LOGCAT_PLACEHOLDER}
+              onChange={(e) => setLogcatArgs(e.target.value)}
+              onKeyDown={(e) => e.key === 'Escape' && setLogcatArgs(null)}
+            />
+            <button type="submit" className="tool">
+              打开
+            </button>
+            <button type="button" className="tool" onClick={() => setLogcatArgs(null)}>
+              取消
+            </button>
+          </form>
+        ) : (
+          <>
+            <ActionButton className="tool" disabledReason={noDeviceReason} onClick={() => focused && void open(focused.serial, 'shell')}>
+              + Shell
+            </ActionButton>
+            <ActionButton className="tool" disabledReason={noDeviceReason} onClick={() => setLogcatArgs('')}>
+              + Logcat
+            </ActionButton>
+            <button className="tool" onClick={() => setSerialOpen(true)}>
+              + 串口
+            </button>
+          </>
+        )}
+      </div>
+      <div className="terminal-body">
+        {tabs.map((tab) => (
+          <TerminalView key={tab.id} tab={tab} active={tab.id === activeId} />
+        ))}
+        {tabs.length === 0 && (
+          <div className="placeholder terminal-empty">
+            {canOpen ? '点击右上角「+ Shell」打开设备终端，或「+ 串口」连接调试串口' : '选择一台在线设备后可打开 adb 终端；串口不需要设备在线'}
+          </div>
+        )}
+        {active?.exit && (
+          <button className="secondary terminal-reopen" onClick={() => void reopen(active.id)}>
+            重新连接
+          </button>
+        )}
+      </div>
+      {serialOpen && (
+        <SerialDialog
+          onCancel={() => setSerialOpen(false)}
+          onOpen={async (options) => {
+            const ok = await openSerial(options)
+            if (ok) setSerialOpen(false)
+            return ok
+          }}
+        />
+      )}
+    </section>
+  )
+}
+
+function IdentityMark({ tab }: { tab: TerminalTab }) {
+  if (tab.exit || tab.identity === 'unknown') return null
+  return tab.identity === 'root' ? (
+    <span className="identity root" title="当前为 root 身份">
+      #
+    </span>
+  ) : (
+    <span className="identity" title="当前为普通用户">
+      $
+    </span>
+  )
+}

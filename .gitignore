@@ -1,0 +1,8 @@
+node_modules/
+out/
+release/
+*.log
+.DS_Store
+*.tsbuildinfo
+# 由 npm run fetch-server 下载并校验
+resources/scrcpy-server

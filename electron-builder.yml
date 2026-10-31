@@ -1,0 +1,23 @@
+appId: com.raferlyan.cockpit
+productName: Cockpit
+directories:
+  buildResources: build
+  output: release
+files:
+  - out/**
+  - package.json
+extraResources:
+  - from: resources
+    to: resources
+    filter: ['**/*']
+asarUnpack:
+  - '**/*.node'
+  - '**/node_modules/node-pty/**'
+mac:
+  target: [dmg]
+  category: public.app-category.developer-tools
+win:
+  target: [nsis]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

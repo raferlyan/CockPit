@@ -1,0 +1,108 @@
+import { join } from 'node:path'
+import { app, BrowserWindow, shell } from 'electron'
+import type { AdbStatus } from '@shared/models'
+import { AdbClient } from './adb/AdbClient'
+import { resolveAdbPath } from './adb/adbPath'
+import { DeviceManager } from './devices/DeviceManager'
+import { broadcast, registerIpc } from './ipc'
+import { MirrorService } from './mirror/MirrorService'
+import { ShellService } from './shell/ShellService'
+import { MetricsService } from './metrics/MetricsService'
+import { SerialService } from './serial/SerialService'
+import { IpcChannel } from '@shared/ipc'
+
+let deviceManager: DeviceManager | undefined
+let mirror: MirrorService | undefined
+let shellService: ShellService | undefined
+let metrics: MetricsService | undefined
+const serial = new SerialService()
+
+/** 开发时为项目根目录下的 resources/，打包后为 extraResources 目录 */
+function resourcesDir(): string {
+  return app.isPackaged ? join(process.resourcesPath, 'resources') : join(app.getAppPath(), 'resources')
+}
+
+function createWindow(): void {
+  const win = new BrowserWindow({
+    width: 1440,
+    height: 900,
+    minWidth: 960,
+    minHeight: 600,
+    show: false,
+    title: 'Cockpit',
+    backgroundColor: '#14161a',
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+
+  win.once('ready-to-show', () => win.show())
+
+  // 外部链接交给系统浏览器
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
+  if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
+    void win.loadURL(process.env.ELECTRON_RENDERER_URL)
+  } else {
+    void win.loadFile(join(__dirname, '../renderer/index.html'))
+  }
+}
+
+async function bootstrap(): Promise<void> {
+  const adbPath = await resolveAdbPath({ bundledDir: app.isPackaged ? process.resourcesPath : undefined })
+  let adb: AdbClient | undefined
+  let fallbackStatus: AdbStatus = { path: null, tracking: false, error: '未找到 adb，请安装 Android SDK platform-tools 或设置 ANDROID_HOME' }
+
+  if (adbPath) {
+    adb = new AdbClient(adbPath)
+    let version: string | undefined
+    try {
+      version = await adb.version()
+    } catch (error) {
+      fallbackStatus = { path: adbPath, tracking: false, error: (error as Error).message }
+    }
+    deviceManager = new DeviceManager(adb, version)
+    mirror = new MirrorService(adb, join(resourcesDir(), 'scrcpy-server'))
+    shellService = new ShellService(adbPath)
+    metrics = new MetricsService(adb, (event) => broadcast(IpcChannel.MetricsEvent, event))
+  }
+
+  registerIpc({ adb, deviceManager, mirror, shell: shellService, metrics, serial, fallbackStatus })
+  createWindow()
+  void deviceManager?.start()
+}
+
+// 主进程里漏掉的异常不让应用崩溃或弹系统对话框，记录后推给界面提示
+function reportMainError(error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error)
+  console.error('[main]', error)
+  broadcast(IpcChannel.AppError, message)
+}
+process.on('uncaughtException', reportMainError)
+process.on('unhandledRejection', reportMainError)
+
+app.whenReady().then(() => {
+  void bootstrap()
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+})
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  mirror?.dispose()
+  shellService?.dispose()
+  metrics?.dispose()
+  serial.dispose()
+  deviceManager?.dispose()
+})
