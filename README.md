@@ -21,8 +21,13 @@
   - 键盘：可以直接打字，中文输入法也能用。
   - 剪贴板：电脑和设备双向同步，Cmd/Ctrl+C、Cmd/Ctrl+V。
   - 工具栏：返回、主页、多任务、音量、电源、通知栏、旋转。
+  - 按需显示：默认中间区域显示设备状态，点「投屏」后投屏画面才换到中间。
   - 多设备：最多 4 台同时投屏，可在网格（并排显示）和单台之间切换。切换设备不会中断其它设备的投屏；多台时自动降低分辨率和码率。
-- **adb 终端**：多标签，支持 Tab 补全、Ctrl+C、vi 等交互操作。标签上显示当前身份，`$` 是普通用户，`#` 是 root。
+- **adb 终端**：多标签，支持 Tab 补全、Ctrl+C、vi 等交互操作。标签上显示设备序列号和当前身份，`$` 是普通用户，`#` 是 root。
+  - 智能提示：输入时弹出命令、子命令、选项、设备上的包名和历史命令候选，Tab / → 采用。
+  - 复制粘贴：macOS 用 Cmd+C / Cmd+V，Windows 用 Ctrl+Shift+C / V，也可以右键菜单。
+  - 把文件拖进终端会插入它的绝对路径。
+- **文件传输**：拖入或选择本机文件，输入、点选或浏览设备目录后上传；也可以把设备上的文件下载到本机指定目录。
 - **logcat**：带颜色，可以附加过滤参数，如 `-s ActivityManager` 或 `--pid=$(pidof -s 包名)`。
 - **串口终端**：通过 USB 转串口线连接设备的调试串口，不依赖 adb。
   - 可设置波特率、数据位、校验、停止位、硬件流控，以及回车发送的换行符。
@@ -97,7 +102,7 @@ ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ npm install
 
 **发布新版本**：修改 `package.json` 里的版本号，然后推送 `v` 开头的标签（如 `git tag v0.2.0 && git push origin v0.2.0`）。GitHub Actions 会构建 macOS 与 Windows 安装包，并发布到 Releases。
 
-架构与模块设计见 [docs/DESIGN.md](docs/DESIGN.md)。
+完整的使用说明见 [docs/USER_GUIDE.md](docs/USER_GUIDE.md)，架构与模块设计见 [docs/DESIGN.md](docs/DESIGN.md)。
 
 ## 技术栈
 

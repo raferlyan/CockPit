@@ -13,7 +13,10 @@ interface AppState {
   adbStatus: AdbStatus | null
   /** 焦点设备：状态面板、存储浏览跟随它切换 */
   focusedSerial: string | null
-  /** 投屏区里的设备（按加入顺序）；切换焦点不会移除，投屏继续进行 */
+  /**
+   * 投屏区里的设备（按加入顺序）；切换焦点不会移除，投屏继续进行。
+   * 为空时中间区域显示设备状态，用户点「投屏」后才把投屏区换到中间。
+   */
   mirrorTiles: string[]
   mirrorLayout: MirrorLayout
   setDevices(devices: Device[]): void
@@ -21,13 +24,9 @@ interface AppState {
   focus(serial: string | null): void
   addTile(serial: string): void
   removeTile(serial: string): void
+  /** 关闭全部投屏窗格，中间区域回到设备状态 */
+  closeMirrors(): void
   setMirrorLayout(layout: MirrorLayout): void
-}
-
-/** 焦点切到一台在线设备时，如果它还不在投屏区就自动加进去（满了则不加） */
-function withTile(tiles: string[], devices: Device[], serial: string | null): string[] {
-  if (!serial || tiles.includes(serial) || tiles.length >= MAX_MIRROR_TILES) return tiles
-  return devices.some((d) => d.serial === serial && d.state === 'device') ? [...tiles, serial] : tiles
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -37,19 +36,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   mirrorTiles: [],
   mirrorLayout: 'grid',
   setDevices: (devices) => {
-    const { devices: previous, focusedSerial, mirrorTiles } = get()
+    const { focusedSerial, mirrorTiles } = get()
     // 焦点设备掉线时切到第一台可用设备
     const stillThere = devices.some((d) => d.serial === focusedSerial)
     const nextFocus = stillThere ? focusedSerial : (devices.find((d) => d.state === 'device')?.serial ?? devices[0]?.serial ?? null)
     // 拔掉的设备移出投屏区；仍在列表中但离线的保留窗格，显示离线提示
     const tiles = mirrorTiles.filter((serial) => devices.some((d) => d.serial === serial))
-    // 焦点换了，或焦点设备刚变为在线（如刚授权），才自动加入投屏区；用户手动关掉的窗格不会被加回来
-    const wasOnline = previous.some((d) => d.serial === nextFocus && d.state === 'device')
-    const autoAdd = nextFocus !== focusedSerial || !wasOnline
-    set({ devices, focusedSerial: nextFocus, mirrorTiles: autoAdd ? withTile(tiles, devices, nextFocus) : tiles })
+    set({ devices, focusedSerial: nextFocus, mirrorTiles: tiles })
   },
   setAdbStatus: (adbStatus) => set({ adbStatus }),
-  focus: (focusedSerial) => set((s) => ({ focusedSerial, mirrorTiles: withTile(s.mirrorTiles, s.devices, focusedSerial) })),
+  focus: (focusedSerial) => set({ focusedSerial }),
   addTile: (serial) => {
     const { mirrorTiles } = get()
     if (mirrorTiles.includes(serial)) {
@@ -69,6 +65,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const focusedSerial = s.focusedSerial === serial && s.mirrorLayout === 'single' && mirrorTiles.length ? mirrorTiles[0] : s.focusedSerial
       return { mirrorTiles, focusedSerial }
     }),
+  closeMirrors: () => set({ mirrorTiles: [] }),
   setMirrorLayout: (mirrorLayout) => set({ mirrorLayout })
 }))
 

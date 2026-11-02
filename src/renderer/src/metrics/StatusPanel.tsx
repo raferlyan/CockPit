@@ -18,7 +18,8 @@ const COMPARE_METRICS: Record<CompareMetric, { label: string; unit: string; rang
   cpuTemp: { label: 'CPU 温度', unit: '°C', pick: (s) => s.thermal?.cpu }
 }
 
-export function StatusPanel() {
+/** wide：放在中间区域时用宽布局，图表与列表分两栏排开 */
+export function StatusPanel({ wide = false }: { wide?: boolean }) {
   const devices = useAppStore((s) => s.devices)
   const focusedSerial = useAppStore((s) => s.focusedSerial)
   const focused = devices.find((d) => d.serial === focusedSerial)
@@ -32,7 +33,7 @@ export function StatusPanel() {
   const showCompare = compare && online.length > 1
 
   return (
-    <section className="panel status-panel">
+    <section className={`panel status-panel${wide ? ' wide' : ''}`}>
       <div className="panel-title-row">
         <h2 className="panel-title">设备状态</h2>
         {online.length > 1 && (
@@ -116,30 +117,32 @@ function DeviceStatus({ serial }: { serial: string }) {
         )}
       </div>
 
-      <h3 className="status-heading">CPU 与内存占用</h3>
-      <Chart
-        series={[
-          { label: 'CPU', color: SERIES_COLORS[0] },
-          { label: '内存', color: SERIES_COLORS[1] }
-        ]}
-        data={loadData}
-        range={[0, 100]}
-        unit="%"
-      />
+      <section className="status-section">
+        <h3 className="status-heading">CPU 与内存占用</h3>
+        <Chart
+          series={[
+            { label: 'CPU', color: SERIES_COLORS[0] },
+            { label: '内存', color: SERIES_COLORS[1] }
+          ]}
+          data={loadData}
+          range={[0, 100]}
+          unit="%"
+        />
+      </section>
 
       {thermalKeys.length > 0 && (
-        <>
+        <section className="status-section">
           <h3 className="status-heading">温度</h3>
           <Chart
             series={thermalKeys.map((key, i) => ({ label: { cpu: 'CPU', battery: '电池', skin: '机身' }[key], color: SERIES_COLORS[i] }))}
             data={thermalData}
             unit="°C"
           />
-        </>
+        </section>
       )}
 
       {cpu && (
-        <>
+        <section className="status-section">
           <h3 className="status-heading">各核心</h3>
           <div className="cores">
             {cpu.cores.map((usage, i) => (
@@ -153,11 +156,11 @@ function DeviceStatus({ serial }: { serial: string }) {
               </div>
             ))}
           </div>
-        </>
+        </section>
       )}
 
       {metrics?.processes && metrics.processes.length > 0 && (
-        <>
+        <section className="status-section">
           <h3 className="status-heading">进程 Top {metrics.processes.length}</h3>
           <table className="proc-table">
             <thead>
@@ -177,11 +180,11 @@ function DeviceStatus({ serial }: { serial: string }) {
               ))}
             </tbody>
           </table>
-        </>
+        </section>
       )}
 
       {metrics?.storage && metrics.storage.length > 0 && (
-        <>
+        <section className="status-section">
           <h3 className="status-heading">存储</h3>
           {metrics.storage.map((m) => {
             const percent = (m.usedKB / m.sizeKB) * 100
@@ -199,7 +202,7 @@ function DeviceStatus({ serial }: { serial: string }) {
               </div>
             )
           })}
-        </>
+        </section>
       )}
     </div>
   )

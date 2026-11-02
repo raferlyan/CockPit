@@ -17,7 +17,7 @@ export function MirrorGrid() {
   const tiles = useAppStore((s) => s.mirrorTiles)
   const layout = useAppStore((s) => s.mirrorLayout)
   const focusedSerial = useAppStore((s) => s.focusedSerial)
-  const { focus, addTile, removeTile, setMirrorLayout } = useAppStore.getState()
+  const { focus, addTile, removeTile, closeMirrors, setMirrorLayout } = useAppStore.getState()
 
   const candidates = devices.filter((d) => d.state === 'device' && !tiles.includes(d.serial))
   const single = layout === 'single'
@@ -26,8 +26,8 @@ export function MirrorGrid() {
 
   return (
     <section className="mirror-area">
-      {(tiles.length > 1 || candidates.length > 0) && (
-        <div className="mirror-bar">
+      <div className="mirror-bar">
+        {tiles.length > 1 && (
           <div className="segmented">
             <button className={single ? '' : 'on'} onClick={() => setMirrorLayout('grid')}>
               网格
@@ -36,27 +36,30 @@ export function MirrorGrid() {
               单台
             </button>
           </div>
-          <span className="muted">
-            {tiles.length} / {MAX_MIRROR_TILES} 台
-          </span>
-          <span className="spacer" />
-          {candidates.length > 0 && (
-            <select
-              className="mirror-add"
-              value=""
-              onChange={(e) => e.target.value && addTile(e.target.value)}
-              title="把另一台在线设备加入投屏区"
-            >
-              <option value="">+ 添加设备</option>
-              {candidates.map((d) => (
-                <option key={d.serial} value={d.serial}>
-                  {deviceTitle(d)}（{d.serial}）
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-      )}
+        )}
+        <span className="muted">
+          {tiles.length} / {MAX_MIRROR_TILES} 台
+        </span>
+        <span className="spacer" />
+        {candidates.length > 0 && (
+          <select
+            className="mirror-add"
+            value=""
+            onChange={(e) => e.target.value && addTile(e.target.value)}
+            title="把另一台在线设备加入投屏区"
+          >
+            <option value="">+ 添加设备</option>
+            {candidates.map((d) => (
+              <option key={d.serial} value={d.serial}>
+                {deviceTitle(d)}（{d.serial}）
+              </option>
+            ))}
+          </select>
+        )}
+        <button className="tool" title="停止全部投屏，中间区域回到设备状态" onClick={closeMirrors}>
+          收起投屏
+        </button>
+      </div>
 
       <div className="mirror-grid" style={{ ['--cols' as string]: columnsFor(visibleCount) }}>
         {tiles.map((serial) => {
@@ -88,11 +91,7 @@ export function MirrorGrid() {
             </ErrorBoundary>
           )
         })}
-        {visibleCount === 0 && (
-          <div className="placeholder mirror-empty">
-            {candidates.length > 0 ? '从右上角「+ 添加设备」把设备加入投屏区' : '选择一台在线设备开始投屏'}
-          </div>
-        )}
+        {visibleCount === 0 && <div className="placeholder mirror-empty">在右侧设备信息里点「投屏」，或从右上角「+ 添加设备」</div>}
       </div>
     </section>
   )

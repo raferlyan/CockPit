@@ -22,6 +22,10 @@ export function TerminalPanel() {
     const device = devices.find((d) => d.serial === tab.serial)
     return `${device ? deviceTitle(device) : tab.serial} · ${tab.kind}`
   }
+  const tooltipOf = (tab: TerminalTab) => {
+    if (tab.port) return tab.port.path
+    return [`序列号 ${tab.serial}`, tab.logcatArgs && `logcat ${tab.logcatArgs}`].filter(Boolean).join('\n')
+  }
   const active = tabs.find((t) => t.id === activeId)
 
   const submitLogcat = () => {
@@ -37,9 +41,10 @@ export function TerminalPanel() {
             key={tab.id}
             className={`terminal-tab${tab.id === activeId ? ' active' : ''}${tab.exit ? ' exited' : ''}`}
             onClick={() => activate(tab.id)}
-            title={tab.logcatArgs ? `logcat ${tab.logcatArgs}` : tab.port?.path}
+            title={tooltipOf(tab)}
           >
             <span className="terminal-tab-title">{titleOf(tab)}</span>
+            {tab.serial && <span className="terminal-tab-serial mono">{tab.serial}</span>}
             {tab.kind === 'shell' && <IdentityMark tab={tab} />}
             <button
               className="terminal-tab-close"
@@ -97,7 +102,9 @@ export function TerminalPanel() {
         ))}
         {tabs.length === 0 && (
           <div className="placeholder terminal-empty">
-            {canOpen ? '点击右上角「+ Shell」打开设备终端，或「+ 串口」连接调试串口' : '选择一台在线设备后可打开 adb 终端；串口不需要设备在线'}
+            {canOpen
+              ? '点击右上角「+ Shell」打开设备终端，或「+ 串口」连接调试串口；输入命令时会给出补全提示，可把文件拖进来插入其绝对路径'
+              : '选择一台在线设备后可打开 adb 终端；串口不需要设备在线'}
           </div>
         )}
         {active?.exit && (

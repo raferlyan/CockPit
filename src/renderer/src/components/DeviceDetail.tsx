@@ -2,9 +2,12 @@ import { api } from '../api'
 import { useAppStore } from '../store'
 import { deviceTitle, STATE_LABEL, stateHint } from '../labels'
 import { RootBadge } from './RootBadge'
+import { ActionButton } from '../notify/ActionButton'
+import { useFileStore } from '../files/fileStore'
 
 export function DeviceDetail() {
   const device = useAppStore((s) => s.devices.find((d) => d.serial === s.focusedSerial))
+  const mirrored = useAppStore((s) => (device ? s.mirrorTiles.includes(device.serial) : false))
 
   if (!device) {
     return (
@@ -16,6 +19,7 @@ export function DeviceDetail() {
   }
 
   const hint = stateHint(device.state)
+  const offlineReason = device.state !== 'device' && '设备不在线'
   const info = device.info
   const rows: Array<[string, string | undefined]> = [
     ['序列号', device.serial],
@@ -51,11 +55,23 @@ export function DeviceDetail() {
           </button>
         </p>
       )}
-      {device.connection === 'tcp' && (
-        <button className="secondary" onClick={() => void api.adb.disconnect(device.serial)}>
-          断开无线连接
-        </button>
-      )}
+      <div className="detail-actions">
+        <ActionButton
+          className={mirrored ? 'secondary' : 'primary'}
+          disabledReason={offlineReason}
+          onClick={() => (mirrored ? useAppStore.getState().removeTile(device.serial) : useAppStore.getState().addTile(device.serial))}
+        >
+          {mirrored ? '停止投屏' : '投屏'}
+        </ActionButton>
+        <ActionButton className="secondary" disabledReason={offlineReason} onClick={() => useFileStore.getState().openTransfer(device.serial)}>
+          文件传输
+        </ActionButton>
+        {device.connection === 'tcp' && (
+          <button className="secondary" onClick={() => void api.adb.disconnect(device.serial)}>
+            断开无线连接
+          </button>
+        )}
+      </div>
     </section>
   )
 }

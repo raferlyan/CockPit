@@ -3,12 +3,14 @@ import type { ControlInput, MirrorEvent, MirrorOptions, MirrorSessionInfo } from
 import type { AdbStatus, Device } from './models'
 import type { TerminalEvent, TerminalOpenOptions, TerminalSessionInfo } from './terminal'
 import type { SerialOptions, SerialPortInfo } from './serial'
+import type { RemoteEntry, TransferResult } from './files'
 
 /** 所有 IPC 通道名集中定义，主进程与 preload 共用 */
 export const IpcChannel = {
   DevicesList: 'devices:list',
   DevicesChanged: 'devices:changed',
   DevicesRefreshInfo: 'devices:refreshInfo',
+  DevicesPackages: 'devices:packages',
   AdbStatus: 'adb:status',
   AdbStatusChanged: 'adb:statusChanged',
   AdbConnect: 'adb:connect',
@@ -28,6 +30,14 @@ export const IpcChannel = {
   MetricsEvent: 'metrics:event',
   SerialList: 'serial:list',
   TerminalOpenSerial: 'terminal:openSerial',
+  FilesList: 'files:list',
+  FilesPush: 'files:push',
+  FilesPull: 'files:pull',
+  FilesPickLocal: 'files:pickLocal',
+  FilesPickDirectory: 'files:pickDirectory',
+  FilesReveal: 'files:reveal',
+  ClipboardRead: 'clipboard:read',
+  ClipboardWrite: 'clipboard:write',
   /** 主进程未捕获的异常，推给界面提示 */
   AppError: 'app:error'
 } as const
@@ -42,6 +52,8 @@ export interface CockpitApi {
   devices: {
     list(): Promise<Device[]>
     refreshInfo(serial: string): Promise<void>
+    /** 已安装应用的包名（pm list packages） */
+    packages(serial: string): Promise<string[]>
     onChanged(listener: (devices: Device[]) => void): () => void
   }
   adb: {
@@ -77,6 +89,24 @@ export interface CockpitApi {
     resize(id: string, cols: number, rows: number): void
     close(id: string): Promise<void>
     onEvent(listener: (event: TerminalEvent) => void): () => void
+  }
+  files: {
+    /** 拖拽进来的 File 对应的本机绝对路径（Electron 不再提供 File.path） */
+    pathForFile(file: File): string
+    /** 系统对话框选择本机文件，取消时返回空数组 */
+    pickLocal(): Promise<string[]>
+    /** 系统对话框选择本机目录，取消时返回 null */
+    pickDirectory(): Promise<string | null>
+    list(serial: string, dir: string): Promise<RemoteEntry[]>
+    push(serial: string, localPaths: string[], remoteDir: string): Promise<TransferResult[]>
+    pull(serial: string, remotePath: string, localDir: string): Promise<TransferResult>
+    /** 在 Finder / 资源管理器中显示 */
+    reveal(path: string): void
+  }
+  /** 走主进程的系统剪贴板，不受页面焦点和权限限制 */
+  clipboard: {
+    readText(): Promise<string>
+    writeText(text: string): void
   }
   metrics: {
     /** 当前缓冲的历史与最近一次进程、存储数据 */

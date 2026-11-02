@@ -15,41 +15,41 @@ beforeEach(() => {
 })
 
 describe('mirror tiles', () => {
-  it('adds the first online device as a tile and keeps tiles when focus moves', () => {
+  it('does not mirror automatically; tiles are added on demand and survive focus changes', () => {
     state().setDevices([device('a'), device('b')])
     expect(state().focusedSerial).toBe('a')
-    expect(state().mirrorTiles).toEqual(['a'])
+    expect(state().mirrorTiles).toEqual([])
+    state().addTile('a')
     state().focus('b')
-    expect(state().mirrorTiles).toEqual(['a', 'b'])
-  })
-
-  it('does not re-add a tile the user closed on later device updates', () => {
-    state().setDevices([device('a')])
-    state().removeTile('a')
-    state().setDevices([device('a')])
-    expect(state().mirrorTiles).toEqual([])
-  })
-
-  it('adds the focused device once it comes online, and drops unplugged devices', () => {
-    state().setDevices([device('a', 'unauthorized')])
-    expect(state().mirrorTiles).toEqual([])
-    state().setDevices([device('a')])
     expect(state().mirrorTiles).toEqual(['a'])
-    state().setDevices([device('b')])
-    expect(state().mirrorTiles).toEqual(['b'])
+    expect(state().focusedSerial).toBe('b')
+  })
+
+  it('drops unplugged devices and keeps offline ones', () => {
+    state().setDevices([device('a'), device('b')])
+    state().addTile('a')
+    state().addTile('b')
+    state().setDevices([device('a', 'offline')])
+    expect(state().mirrorTiles).toEqual(['a'])
+  })
+
+  it('closes all tiles at once', () => {
+    state().setDevices([device('a'), device('b')])
+    state().addTile('a')
+    state().addTile('b')
+    state().closeMirrors()
+    expect(state().mirrorTiles).toEqual([])
   })
 
   it('caps the number of tiles', () => {
     state().setDevices(['a', 'b', 'c', 'd', 'e'].map((s) => device(s)))
-    for (const s of ['b', 'c', 'd', 'e']) state().addTile(s)
+    for (const s of ['a', 'b', 'c', 'd', 'e']) state().addTile(s)
     expect(state().mirrorTiles).toEqual(['a', 'b', 'c', 'd'])
-    // 满了以后切换焦点也不会自动加入
-    state().focus('e')
-    expect(state().mirrorTiles).toHaveLength(store.MAX_MIRROR_TILES)
   })
 
   it('moves focus to a remaining tile when closing the shown tile in single layout', () => {
     state().setDevices([device('a'), device('b')])
+    state().addTile('a')
     state().addTile('b')
     state().setMirrorLayout('single')
     state().removeTile('b')

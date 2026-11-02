@@ -8,6 +8,7 @@ import { deviceTitle } from '../labels'
 import { discardMirrorPort, takeMirrorPort } from './portRegistry'
 import { AndroidKey, isInjectableText, metaStateOf, shouldSendAsKeycode, toAndroidKeycode } from './keyboard'
 import type { WorkerInbound, WorkerOutbound } from './decoder.worker'
+import { droppedPaths, hasDraggedFiles, useFileStore } from '../files/fileStore'
 
 type ViewState = 'idle' | 'starting' | 'running' | 'error'
 interface Size {
@@ -56,6 +57,9 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
   const videoSizeRef = useRef<Size | null>(null)
   const composingRef = useRef(false)
   const hiddenRef = useRef(hidden)
+  /** 每次开始/停止/卸载加一；启动返回时代数已变说明期间被取消，要把刚建好的会话停掉 */
+  const startGenRef = useRef(0)
+  const [dropping, setDropping] = useState(false)
 
   const send = useCallback((input: ControlInput) => {
     const id = sessionIdRef.current
@@ -76,14 +80,20 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
   }, [])
 
   const start = useCallback(async () => {
+    const gen = ++startGenRef.current
     setState('starting')
     setError(null)
     try {
       const info = await api.mirror.start(device.serial, multi ? GRID_OPTIONS : undefined)
+      if (gen !== startGenRef.current) {
+        void api.mirror.stop(info.sessionId)
+        return
+      }
       sessionIdRef.current = info.sessionId
       setSession(info)
       setState('running')
     } catch (err) {
+      if (gen !== startGenRef.current) return
       const message = errorMessage(err)
       notify('error', '投屏启动失败', message)
       teardown('error', message)
@@ -91,6 +101,7 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
   }, [device.serial, multi, teardown])
 
   const stop = useCallback(() => {
+    startGenRef.current++
     const id = sessionIdRef.current
     if (id) void api.mirror.stop(id)
     teardown('idle')
@@ -110,9 +121,16 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
     [teardown]
   )
 
-  // 卸载（切换设备）时结束会话
+  // 窗格是用户点「投屏」才出现的，挂载即开始投屏
+  useEffect(() => {
+    void start()
+    // 只在挂载时启动一次，之后由用户点按钮控制
+  }, [])
+
+  // 卸载（关闭窗格）时结束会话
   useEffect(
     () => () => {
+      startGenRef.current++
       const id = sessionIdRef.current
       if (id) void api.mirror.stop(id)
       workerRef.current?.terminate()
@@ -328,10 +346,27 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
   const keysDisabled = state === 'starting' ? STARTING_REASON : !running && '先点「开始投屏」，投屏后才能操作设备'
 
   return (
-    <div className={`mirror${active && multi ? ' active' : ''}`} style={hidden ? { display: 'none' } : undefined} onMouseDownCapture={onActivate}>
+    <div
+      className={`mirror${active && multi ? ' active' : ''}${dropping ? ' dropping' : ''}`}
+      style={hidden ? { display: 'none' } : undefined}
+      onMouseDownCapture={onActivate}
+      onDragOver={(e) => {
+        if (!hasDraggedFiles(e)) return
+        e.preventDefault()
+        setDropping(true)
+      }}
+      onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setDropping(false)}
+      onDrop={(e) => {
+        setDropping(false)
+        const paths = droppedPaths(e)
+        if (!paths.length) return
+        e.preventDefault()
+        useFileStore.getState().openTransfer(device.serial, paths)
+      }}
+    >
       <div className="mirror-toolbar">
-        <span className="mirror-title" title={deviceTitle(device)}>
-          {deviceTitle(device)}
+        <span className="mirror-title" title={`${deviceTitle(device)}（${device.serial}）`}>
+          {deviceTitle(device)} <span className="mono muted">{device.serial}</span>
         </span>
         {running && videoSize && (
           <span className="mirror-meta mono">
@@ -382,6 +417,7 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
         {running && !videoSize && <p className="mirror-hint">等待画面…</p>}
         {state === 'idle' && <p className="mirror-hint">点击「开始投屏」</p>}
         {state === 'error' && <p className="mirror-hint error">投屏失败：{error}</p>}
+        {dropping && <p className="mirror-drop-hint">松开鼠标，选择设备上的目标目录后上传</p>}
         <textarea
           ref={imeRef}
           className="mirror-ime"

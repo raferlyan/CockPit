@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import { IpcChannel, MIRROR_PORT_MESSAGE, type CockpitApi } from '@shared/ipc'
 
 // MessagePort 不能经 contextBridge 传递，改用 window.postMessage 转交给页面
@@ -18,6 +18,7 @@ const api: CockpitApi = {
   devices: {
     list: () => ipcRenderer.invoke(IpcChannel.DevicesList),
     refreshInfo: (serial) => ipcRenderer.invoke(IpcChannel.DevicesRefreshInfo, serial),
+    packages: (serial) => ipcRenderer.invoke(IpcChannel.DevicesPackages, serial),
     onChanged: (listener) => subscribe(IpcChannel.DevicesChanged, listener)
   },
   adb: {
@@ -45,6 +46,19 @@ const api: CockpitApi = {
     resize: (id, cols, rows) => ipcRenderer.send(IpcChannel.TerminalResize, id, cols, rows),
     close: (id) => ipcRenderer.invoke(IpcChannel.TerminalClose, id),
     onEvent: (listener) => subscribe(IpcChannel.TerminalEvent, listener)
+  },
+  files: {
+    pathForFile: (file) => webUtils.getPathForFile(file),
+    pickLocal: () => ipcRenderer.invoke(IpcChannel.FilesPickLocal),
+    pickDirectory: () => ipcRenderer.invoke(IpcChannel.FilesPickDirectory),
+    list: (serial, dir) => ipcRenderer.invoke(IpcChannel.FilesList, serial, dir),
+    push: (serial, localPaths, remoteDir) => ipcRenderer.invoke(IpcChannel.FilesPush, serial, localPaths, remoteDir),
+    pull: (serial, remotePath, localDir) => ipcRenderer.invoke(IpcChannel.FilesPull, serial, remotePath, localDir),
+    reveal: (path) => ipcRenderer.send(IpcChannel.FilesReveal, path)
+  },
+  clipboard: {
+    readText: () => ipcRenderer.invoke(IpcChannel.ClipboardRead),
+    writeText: (text) => ipcRenderer.send(IpcChannel.ClipboardWrite, text)
   },
   metrics: {
     snapshot: (serial) => ipcRenderer.invoke(IpcChannel.MetricsSnapshot, serial),
