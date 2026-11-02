@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cockpit 产品演示</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700;900&display=swap">
+<style>
+/* 布局：仪表盘式长页——顶部状态条 + 主截图，下面功能分段左右交替，截图可点开放大 */
+:root {
+  --bg: #14161a;
+  --surface: #1b1e23;
+  --surface-2: #23272e;
+  --line: #2c313a;
+  --fg: #e3e6eb;
+  --dim: #8b929e;
+  --accent: #4c9aff;
+  --ok: #3fb950;
+  --warn: #d29922;
+  --shadow: rgb(0 0 0 / 45%);
+  --font-display: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-body: 'Noto Sans SC', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f4f6f9; --surface: #ffffff; --surface-2: #eaeef4; --line: #d5dbe4;
+    --fg: #161a21; --dim: #5b6472; --accent: #1f6fe0; --ok: #1f8a3b; --warn: #a86f00;
+    --shadow: rgb(22 32 50 / 14%); color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f4f6f9; --surface: #ffffff; --surface-2: #eaeef4; --line: #d5dbe4;
+  --fg: #161a21; --dim: #5b6472; --accent: #1f6fe0; --ok: #1f8a3b; --warn: #a86f00;
+  --shadow: rgb(22 32 50 / 14%); color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.7 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+.wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; }
+p { margin: 0; }
+a { color: var(--accent); }
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- 顶部状态条 ---------- */
+.statusbar {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 20;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+  z-index: 21; background: var(--surface);
+}
+.statusbar .wrap {
+  display: flex; align-items: center; gap: 18px; height: 44px;
+  font-family: var(--font-mono); font-size: 12px; color: var(--dim);
+  overflow-x: auto; white-space: nowrap;
+}
+.brand { font-family: var(--font-display); font-weight: 900; font-size: 15px; color: var(--fg); letter-spacing: 0.02em; }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 6px; vertical-align: 1px; }
+.statusbar nav { display: flex; gap: 14px; margin-left: auto; }
+.statusbar nav a { color: var(--dim); text-decoration: none; font-family: var(--font-body); font-size: 13px; }
+.statusbar nav a:hover { color: var(--fg); }
+
+/* ---------- 开场 ---------- */
+.hero { padding-block: 56px 32px; display: grid; gap: 28px; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; color: var(--accent); text-transform: uppercase; }
+.hero h1 { font-size: clamp(32px, 5.4vw, 56px); font-weight: 900; line-height: 1.15; letter-spacing: -0.01em; }
+.hero h1 em { font-style: normal; color: var(--accent); }
+.hero .lead { max-width: 62ch; color: var(--dim); font-size: 17px; }
+.cta { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: 6px;
+  font-weight: 500; text-decoration: none; border: 1px solid var(--line); color: var(--fg); background: var(--surface-2);
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.readouts { display: flex; flex-wrap: wrap; gap: 8px 22px; font-family: var(--font-mono); font-size: 12px; color: var(--dim); }
+.readouts b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- 截图框 ---------- */
+.shot {
+  margin: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  background: var(--surface); box-shadow: 0 18px 50px var(--shadow);
+}
+.shot button { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.shot img { display: block; width: 100%; height: auto; }
+.shot figcaption { padding: 8px 14px; font-size: 13px; color: var(--dim); border-top: 1px solid var(--line); }
+.chrome { display: flex; align-items: center; gap: 6px; padding: 9px 12px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.chrome i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+.chrome span { margin-left: 8px; font-size: 12px; color: var(--dim); font-family: var(--font-mono); }
+
+/* ---------- 对比表 ---------- */
+section { padding-block: 56px; }
+section + section { border-top: 1px solid var(--line); }
+.section-head { display: grid; gap: 8px; margin-bottom: 28px; max-width: 68ch; }
+.section-head h2 { font-size: clamp(24px, 3.2vw, 32px); font-weight: 700; }
+.section-head p { color: var(--dim); }
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { width: 100%; border-collapse: collapse; min-width: 560px; }
+th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font-size: 12px; letter-spacing: 0.06em; color: var(--dim); font-weight: 500; background: var(--surface-2); }
+td:first-child { color: var(--dim); width: 46%; }
+td:last-child::before { content: "→ "; color: var(--accent); }
+
+/* ---------- 功能分段 ---------- */
+.feature { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 40px; align-items: center; }
+.feature.flip { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+.feature.flip .copy { order: 2; }
+.copy { display: grid; gap: 14px; min-width: 0; }
+.copy h2 { font-size: clamp(22px, 2.8vw, 28px); font-weight: 700; }
+.copy > p { color: var(--dim); }
+.points { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.points li { display: grid; grid-template-columns: 18px 1fr; gap: 8px; }
+.points li::before { content: ""; width: 8px; height: 8px; margin-top: 9px; border-radius: 2px; background: var(--accent); }
+.tag { display: inline-block; font-family: var(--font-mono); font-size: 11px; padding: 1px 7px; border-radius: 4px; border: 1px solid var(--line); color: var(--dim); }
+.stack { display: grid; gap: 16px; min-width: 0; }
+
+/* ---------- 布局示意 ---------- */
+.layout-map {
+  display: grid; grid-template-columns: 1fr 3fr 1.3fr; grid-template-rows: 120px 70px; gap: 6px;
+  font-size: 13px; max-width: 760px;
+}
+.layout-map div { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 10px 12px; color: var(--dim); }
+.layout-map b { display: block; color: var(--fg); font-weight: 500; }
+.lm-list { grid-row: 1 / 3; }
+.lm-center { border-color: var(--accent) !important; }
+.lm-side { grid-row: 1 / 3; }
+
+/* ---------- 智能提示试玩 ---------- */
+.try {
+  border: 1px solid var(--line); border-radius: 10px; background: #14161a; color: #e3e6eb;
+  font-family: var(--font-mono); font-size: 13px; overflow: visible; position: relative;
+}
+.try-head { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid #2c313a; background: #1b1e23; border-radius: 10px 10px 0 0; font-size: 12px; color: #8b929e; }
+.try-head b { color: #e3e6eb; font-weight: 400; }
+.try-body { padding: 12px 14px 16px; min-height: 230px; position: relative; }
+.try-line { display: flex; align-items: center; gap: 0; white-space: pre; }
+.try-line .prompt { color: #8b929e; }
+.try input {
+  flex: 1; min-width: 0; background: none; border: 0; outline: none; color: #e3e6eb;
+  font: inherit; caret-color: #e3e6eb; padding: 0;
+}
+.try-out { color: #8b929e; white-space: pre-wrap; margin-bottom: 4px; }
+.pop {
+  position: absolute; left: 14px; right: 14px; max-width: 520px; margin-top: 4px;
+  background: #1b1e23; border: 1px solid #2c313a; border-radius: 6px; padding: 3px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%); font-size: 12px; z-index: 2;
+}
+.pop-item { display: flex; gap: 8px; align-items: center; padding: 2px 6px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.pop-item.on { background: #23272e; }
+.kind { flex: none; width: 34px; text-align: center; font-size: 10px; border: 1px solid #2c313a; border-radius: 3px; color: #8b929e; font-family: var(--font-body); }
+.kind.package { color: #3fb950; border-color: #3fb950; }
+.kind.history { color: #d29922; border-color: #d29922; }
+.pop-desc { margin-left: auto; padding-left: 12px; color: #8b929e; font-family: var(--font-body); overflow: hidden; text-overflow: ellipsis; }
+.pop-foot { border-top: 1px solid #2c313a; margin-top: 3px; padding: 3px 6px 1px; color: #8b929e; font-size: 10px; font-family: var(--font-body); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: var(--font-mono); font-size: 12px; padding: 3px 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); color: var(--fg); cursor: pointer; }
+.chip:hover { border-color: var(--accent); }
+
+/* ---------- 快捷键 / 上手 ---------- */
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; }
+kbd { font-family: var(--font-mono); font-size: 12px; padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: var(--surface-2); white-space: nowrap; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; counter-reset: step; }
+.steps li { display: grid; grid-template-columns: 32px 1fr; gap: 12px; counter-increment: step; }
+.steps li::before { content: counter(step); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--accent); color: var(--accent); font-family: var(--font-mono); font-size: 13px; }
+.steps b { display: block; }
+.steps span { color: var(--dim); font-size: 14px; }
+
+footer { padding-block: 32px 48px; color: var(--dim); font-size: 13px; border-top: 1px solid var(--line); }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+
+/* ---------- 放大查看 ---------- */
+dialog.lightbox { border: 0; padding: 0; background: transparent; max-width: min(96vw, 1600px); max-height: 94vh; }
+dialog.lightbox::backdrop { background: rgb(0 0 0 / 80%); }
+dialog.lightbox img { display: block; max-width: 100%; max-height: 90vh; border-radius: 8px; }
+dialog.lightbox p { color: #e3e6eb; text-align: center; padding-top: 8px; font-size: 13px; }
+
+@media (max-width: 860px) {
+  .feature, .feature.flip { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .feature.flip .copy { order: 0; }
+  .statusbar .readout-wide { display: none; }
+  .layout-map { grid-template-columns: 1fr 2fr 1fr; font-size: 12px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .shot { transition: transform 0.2s ease; }
+  .shot:hover { transform: translateY(-2px); }
+}
+</style>
+</head>
+<body>
+<header class="statusbar">
+  <div class="wrap">
+    <span class="brand">Cockpit</span>
+    <span><span class="dot"></span>adb 1.0.41</span>
+    <span class="readout-wide">v0.2.0 · macOS / Windows</span>
+    <nav aria-label="页面导航">
+      <a href="#layout">界面</a>
+      <a href="#status">状态</a>
+      <a href="#mirror">投屏</a>
+      <a href="#terminal">终端</a>
+      <a href="#transfer">传输</a>
+      <a href="#start">上手</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <p class="eyebrow">Android 调试桌面工具 · v0.2.0</p>
+    <h1>投屏、终端、负载监控、文件传输，<em>一个窗口搞定</em></h1>
+    <p class="lead">Cockpit 把调试 Android 设备时常开的 scrcpy、终端、串口工具和一堆 <code>adb</code> 命令收进同一个窗口。只依赖电脑上的 adb，手机上不用装任何 App。</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/raferlyan/CockPit/releases/tag/v0.2.0" target="_blank" rel="noopener">下载 v0.2.0</a>
+      <a class="btn" href="https://github.com/raferlyan/CockPit/blob/main/docs/USER_GUIDE.md" target="_blank" rel="noopener">使用说明</a>
+      <a class="btn" href="https://github.com/raferlyan/CockPit" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <div class="readouts" aria-label="截图中设备的实时读数">
+      <span>设备 <b>OnePlus GM1910</b></span>
+      <span>序列号 <b>c5002490</b></span>
+      <span>Android <b>12 (API 31)</b></span>
+      <span>CPU <b>17%</b></span>
+      <span>温度 <b>40.5°C</b></span>
+      <span>采样 <b>1 s</b></span>
+    </div>
+    <figure class="shot">
+      <div class="chrome"><i></i><i></i><i></i><span>Cockpit — 默认视图：设备状态</span></div>
+      <button type="button" data-zoom="assets/screenshots/status.jpg" data-caption="默认视图：中间是设备状态，右侧是设备信息，下方是终端">
+        <img src="assets/screenshots/status.jpg" alt="Cockpit 主界面：左侧设备列表，中间是 CPU、内存、温度、电池等实时负载和曲线，右侧是设备信息，下方是 adb 终端" width="1389" height="868">
+      </button>
+      <figcaption>打开即看状态：选中设备后，中间区域每秒刷新负载，右侧固定显示设备信息。点击截图可放大。</figcaption>
+    </figure>
+  </div>
+
+  <section>
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">为什么用它</p>
+        <h2>以前要开好几个窗口的事</h2>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>以前</th><th>现在用 Cockpit</th></tr></thead>
+          <tbody>
+            <tr><td>scrcpy 另开一个窗口投屏</td><td>投屏嵌在主窗口，最多 4 台同时投</td></tr>
+            <tr><td>多台设备要记序列号，敲 <code>adb -s &lt;序列号&gt; shell</code></td><td>选中设备点「+ Shell」，标签上直接显示设备名和序列号</td></tr>
+            <tr><td><code>top</code>、<code>dumpsys battery</code>、<code>cat /sys/class/thermal/…</code> 轮着看</td><td>CPU、内存、温度、电池、网络、进程、存储每秒刷新，带 5 分钟曲线</td></tr>
+            <tr><td>记不住 <code>pm</code> / <code>am</code> / <code>dumpsys</code> 的子命令和包名</td><td>边输入边提示命令、选项、设备上的包名和历史命令</td></tr>
+            <tr><td><code>adb push</code> / <code>adb pull</code> 手敲路径</td><td>拖文件进来，选好设备目录就上传；设备上的文件点一下下载</td></tr>
+            <tr><td>串口工具另装一个软件</td><td>同一个终端区开串口标签</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="layout">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">界面</p>
+        <h2>默认看状态，需要时再投屏</h2>
+        <p>中间区域默认显示设备状态。点右侧「投屏」，投屏画面换到中间，状态挪到右侧继续刷新；点「收起投屏」回来。设备信息始终固定在右上方，只有下面的状态区滚动。</p>
+      </div>
+      <div class="layout-map" aria-label="界面布局示意">
+        <div class="lm-list"><b>设备列表</b>插拔自动识别，支持无线连接</div>
+        <div class="lm-center"><b>中间区域</b>默认：设备状态 · 点「投屏」后：投屏画面</div>
+        <div class="lm-side"><b>设备信息（固定）</b>投屏 · 文件传输<br><br><b>设备状态</b>投屏时出现，可滚动</div>
+        <div><b>终端</b>Shell / Logcat / 串口</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="status">
+    <div class="wrap feature">
+      <div class="copy">
+        <p class="eyebrow">设备状态</p>
+        <h2>每秒刷新的负载，一眼看出谁在吃资源</h2>
+        <ul class="points">
+          <li><span>CPU 总占用和 <code>loadavg</code>，每个核心的占用和当前频率（MHz），离线核心会标出来</span></li>
+          <li><span>内存与 Swap / ZRAM，CPU / GPU / 电池 / 机身温度，电池电量、电压和充电状态</span></li>
+          <li><span>网络上下行速率，进程 Top 10，各分区存储占用</span></li>
+          <li><span>最近 5 分钟曲线；连了多台设备可以切到「对比」，把 CPU、内存或温度画在一张图上</span></li>
+        </ul>
+      </div>
+      <figure class="shot">
+        <button type="button" data-zoom="assets/screenshots/status.jpg" data-caption="设备状态：概览卡片、CPU 与内存曲线、温度曲线、各核心、进程 Top 10">
+          <img src="assets/screenshots/status.jpg" alt="设备状态视图：概览卡片、CPU 与内存曲线、温度曲线、各核心占用、进程 Top 10" width="1389" height="868" loading="lazy">
+        </button>
+        <figcaption>温度曲线里 CPU 在 40°C 上下波动，进程 Top 10 里能看到占用最高的应用。</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="mirror">
+    <div class="wrap feature flip">
+      <div class="copy">
+        <p class="eyebrow">投屏与操控</p>
+        <h2>点一下「投屏」，画面直接换到中间</h2>
+        <p>基于 scrcpy 服务端，画面用 WebCodecs 硬件解码后嵌在主窗口里。</p>
+        <ul class="points">
+          <li><span>鼠标左键触摸、右键返回、中键主页、滚轮滚动；键盘直接打字，中文输入法可用</span></li>
+          <li><span>电脑和手机双向剪贴板，工具栏有返回、主页、多任务、音量、电源、通知栏、旋转</span></li>
+          <li><span>最多 4 台同时投屏，网格并排或单台切换，切换时其它设备不断流</span></li>
+          <li><span>标题显示设备名和序列号；把文件拖到画面上直接打开传输窗口</span></li>
+        </ul>
+      </div>
+      <figure class="shot">
+        <button type="button" data-zoom="assets/screenshots/mirror.jpg" data-caption="投屏中：画面在中间，设备信息固定在右上，设备状态在右下继续刷新">
+          <img src="assets/screenshots/mirror.jpg" alt="投屏视图：中间是手机画面和操控工具栏，右侧上方是设备信息，下方是可滚动的设备状态" width="1389" height="868" loading="lazy">
+        </button>
+        <figcaption>投屏时状态挪到右侧，设备信息不随滚动移动。工具栏显示 <span class="mono">590×1280 · 8 fps</span>。</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="terminal">
+    <div class="wrap">
+      <div class="feature">
+        <div class="copy">
+          <p class="eyebrow">终端</p>
+          <h2>会提示命令和包名的 adb shell</h2>
+          <p>Shell、Logcat、串口在同一个终端区，多标签，标签上显示设备名和序列号，<code>$</code> 是普通用户，<code>#</code> 是 root。</p>
+          <ul class="points">
+            <li><span>输入时弹出命令、子命令、选项和参数候选，每项带中文说明</span></li>
+            <li><span>在 <code>pm clear</code>、<code>am force-stop</code>、<code>monkey -p</code> 后提示设备上已安装的包名，输入 <code>tencent</code> 就能找到 <code>com.tencent.mm</code></span></li>
+            <li><span>执行过的命令记为历史，下次排在最前</span></li>
+            <li><span>复制粘贴：<kbd>⌘C</kbd> <kbd>⌘V</kbd>，Windows 上 <kbd>Ctrl+Shift+C</kbd> <kbd>Ctrl+Shift+V</kbd>，也可以右键菜单</span></li>
+            <li><span>把电脑上的文件拖进终端，插入它的绝对路径</span></li>
+          </ul>
+        </div>
+        <div class="stack">
+          <figure class="shot">
+            <button type="button" data-zoom="assets/screenshots/suggest-package.jpg" data-caption="输入 pm clear tenc，提示设备上包含 tencent 的包名">
+              <img src="assets/screenshots/suggest-package.jpg" alt="终端里输入 pm clear tenc，弹出 com.tencent.mm 等包名候选" width="1098" height="241" loading="lazy">
+            </button>
+            <figcaption>包名模糊匹配，数据来自真机上的 <code>pm list packages</code>。</figcaption>
+          </figure>
+          <figure class="shot">
+            <button type="button" data-zoom="assets/screenshots/suggest-command.jpg" data-caption="输入 pm cl，提示子命令 clear">
+              <img src="assets/screenshots/suggest-command.jpg" alt="终端里输入 pm cl，弹出子命令 clear 及其说明" width="1098" height="241" loading="lazy">
+            </button>
+            <figcaption>子命令带中文说明，<kbd>Tab</kbd> 或 <kbd>→</kbd> 采用。</figcaption>
+          </figure>
+          <figure class="shot">
+            <button type="button" data-zoom="assets/screenshots/context-menu.jpg" data-caption="选中终端文字后右键：复制、粘贴、全选、清屏">
+              <img src="assets/screenshots/context-menu.jpg" alt="终端选中文字后右键弹出复制、粘贴、全选、清屏菜单" width="997" height="314" loading="lazy">
+            </button>
+            <figcaption>右键菜单：复制、粘贴、全选、清屏。</figcaption>
+          </figure>
+        </div>
+      </div>
+
+      <div class="section-head" style="margin-top: 48px">
+        <p class="eyebrow">试一试</p>
+        <h3 style="font-size: 20px; font-weight: 700">在下面输入命令，体验智能提示</h3>
+        <p>这是网页里的模拟终端，只演示提示逻辑，不会连接设备。包名是示例数据。</p>
+      </div>
+      <div class="chips" aria-label="示例输入">
+        <button type="button" class="chip" data-try="pm cl">pm cl</button>
+        <button type="button" class="chip" data-try="pm clear tenc">pm clear tenc</button>
+        <button type="button" class="chip" data-try="dumpsys ">dumpsys␣</button>
+        <button type="button" class="chip" data-try="input keyevent KEYCODE_">input keyevent KEYCODE_</button>
+        <button type="button" class="chip" data-try="logcat -b ">logcat -b␣</button>
+        <button type="button" class="chip" data-try="getprop ro.product.">getprop ro.product.</button>
+      </div>
+      <div class="try" style="margin-top: 12px">
+        <div class="try-head"><b>OnePlus GM1910 · shell</b><span>c5002490</span><span>$</span></div>
+        <div class="try-body" id="try-body">
+          <div id="try-history"></div>
+          <label class="try-line" for="try-input">
+            <span class="prompt">OnePlus7Pro:/ $ </span>
+            <input id="try-input" autocomplete="off" spellcheck="false" aria-label="模拟终端输入" value="pm clear tenc">
+          </label>
+          <div class="pop" id="try-pop" hidden></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="transfer">
+    <div class="wrap feature flip">
+      <div class="copy">
+        <p class="eyebrow">文件传输</p>
+        <h2>选好设备目录再上传，下载也能指定位置</h2>
+        <ul class="points">
+          <li><span>左边列出本机文件的绝对路径，拖进来或点「选择文件…」</span></li>
+          <li><span>右边选设备目录：直接输入、点快捷目录 <code>/sdcard/Download</code> <code>/sdcard</code> <code>/data/local/tmp</code>，或逐级浏览</span></li>
+          <li><span>目录不存在自动创建，单个文件失败不影响其它文件</span></li>
+          <li><span>目录里的文件或文件夹点「下载」，保存到电脑上指定的目录</span></li>
+        </ul>
+      </div>
+      <figure class="shot">
+        <button type="button" data-zoom="assets/screenshots/transfer.jpg" data-caption="文件传输：左边本机文件，右边设备目录浏览">
+          <img src="assets/screenshots/transfer.jpg" alt="文件传输窗口：左侧本机文件拖放区，右侧设备目标目录、快捷目录和目录列表" width="1389" height="868" loading="lazy">
+        </button>
+        <figcaption>从右侧设备信息点「文件传输」打开，也可以把文件直接拖到投屏画面上。</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="start">
+    <div class="wrap grid-2">
+      <div>
+        <div class="section-head">
+          <p class="eyebrow">上手</p>
+          <h2>三步开始用</h2>
+        </div>
+        <ol class="steps">
+          <li><div><b>装 adb</b><span>安装 Android SDK Platform-Tools。Cockpit 自动在 <code>ANDROID_HOME</code>、<code>PATH</code> 和 SDK 默认位置查找，底部状态栏显示找到的路径。</span></div></li>
+          <li><div><b>装 Cockpit</b><span>下载对应平台的安装包。macOS 首次打开在 Finder 里右键 →「打开」；Windows 遇到 SmartScreen 点「更多信息」→「仍要运行」。</span></div></li>
+          <li><div><b>连设备</b><span>手机打开 USB 调试并允许授权，左侧出现绿点即在线。无线调试在左下角输入 <code>IP:端口</code>。</span></div></li>
+        </ol>
+      </div>
+      <div>
+        <div class="section-head">
+          <p class="eyebrow">下载</p>
+          <h2>v0.2.0 安装包</h2>
+        </div>
+        <div class="table-scroll">
+          <table style="min-width: 0">
+            <thead><tr><th>平台</th><th>文件</th></tr></thead>
+            <tbody>
+              <tr><td>macOS（Apple 芯片）</td><td class="mono">Cockpit-0.2.0-mac-arm64.dmg</td></tr>
+              <tr><td>macOS（Intel）</td><td class="mono">Cockpit-0.2.0-mac-x64.dmg</td></tr>
+              <tr><td>Windows 10 1809+（x64）</td><td class="mono">Cockpit-0.2.0-win-x64.exe</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin-top: 14px"><a href="https://github.com/raferlyan/CockPit/releases/tag/v0.2.0" target="_blank" rel="noopener">前往 GitHub Releases 下载 →</a></p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Cockpit · Apache License 2.0 · scrcpy-server 来自 Genymobile/scrcpy</span>
+    <span>截图来自真机 OnePlus GM1910（Android 12）</span>
+  </div>
+</footer>
+
+<dialog class="lightbox" id="lightbox" aria-label="放大查看截图">
+  <img id="lightbox-img" alt="">
+  <p id="lightbox-caption"></p>
+</dialog>
+
+<script>
+// 截图放大
+const box = document.getElementById('lightbox')
+const boxImg = document.getElementById('lightbox-img')
+const boxCap = document.getElementById('lightbox-caption')
+document.querySelectorAll('[data-zoom]').forEach((el) => {
+  el.addEventListener('click', () => {
+    boxImg.src = el.dataset.zoom
+    boxImg.alt = el.dataset.caption || ''
+    boxCap.textContent = el.dataset.caption || ''
+    box.showModal()
+  })
+})
+box.addEventListener('click', () => box.close())
+
+// 智能提示试玩：与应用里同样的规则（命令树 + 选项参数 + 包名包含匹配 + 历史），这里只放演示用的子集
+const pkg = (desc) => ({ desc, packages: true })
+const SPEC = { sub: {
+  am: { desc: 'Activity 管理', sub: { start: { desc: '启动 Activity', options: { '-n': pkg('组件'), '-W': '等待启动完成' } }, 'force-stop': pkg('强制停止应用'), kill: pkg('杀掉后台进程'), broadcast: { desc: '发送广播' } } },
+  pm: { desc: '包管理', sub: {
+    list: { desc: '列出', sub: { packages: { desc: '已安装应用', options: { '-3': '仅第三方', '-s': '仅系统', '-f': '显示 APK 路径' } }, permissions: { desc: '权限' }, features: { desc: '设备特性' } } },
+    clear: pkg('清除应用数据'), path: pkg('APK 路径'), uninstall: pkg('卸载'), disable: pkg('禁用'), enable: pkg('启用'), grant: pkg('授予权限') } },
+  dumpsys: { desc: '系统服务状态', values: { activity: 'Activity / 进程', meminfo: '内存占用', battery: '电池', gfxinfo: '渲染帧耗时', cpuinfo: 'CPU 占用', window: '窗口', package: '包信息', thermalservice: '温控' } },
+  input: { desc: '模拟输入', sub: { keyevent: { desc: '按键', values: { KEYCODE_HOME: '主页', KEYCODE_BACK: '返回', KEYCODE_POWER: '电源', KEYCODE_VOLUME_UP: '音量+', KEYCODE_APP_SWITCH: '多任务', KEYCODE_WAKEUP: '亮屏' } }, text: { desc: '输入文本' }, tap: { desc: '点击 x y' }, swipe: { desc: '滑动' } } },
+  logcat: { desc: '查看日志', options: { '-b': { desc: '缓冲区', values: { main: '主', system: '系统', crash: '崩溃', events: '事件', all: '全部' } }, '-c': '清空', '-s': '只看指定 TAG', '-v': { desc: '格式', values: { threadtime: '默认', color: '彩色', brief: '简要' } } } },
+  getprop: { desc: '读取系统属性', values: { 'ro.product.model': '型号', 'ro.product.brand': '品牌', 'ro.product.manufacturer': '厂商', 'ro.build.version.sdk': 'API 级别', 'ro.build.version.release': 'Android 版本', 'ro.serialno': '序列号' } },
+  settings: { desc: '系统设置', sub: { get: { desc: '读取', values: { system: '', secure: '', global: '' } }, put: { desc: '写入', values: { system: '', secure: '', global: '' } } } },
+  monkey: { desc: '压力测试', options: { '-p': pkg('目标应用'), '--throttle': '事件间隔毫秒' } },
+  wm: { desc: '窗口管理', sub: { size: { desc: '分辨率' }, density: { desc: '密度' } } },
+  screencap: { desc: '截屏' }, screenrecord: { desc: '录屏' }, ps: { desc: '进程列表' }, top: { desc: '实时进程' }, ls: { desc: '列目录' }, getenforce: { desc: 'SELinux 状态' }
+} }
+const PACKAGES = ['com.android.settings', 'com.android.systemui', 'com.example.demo', 'com.tencent.mm', 'com.tencent.mobileqq', 'com.tencent.qqlive', 'com.ss.android.ugc.aweme']
+const KIND = { history: '历史', command: '命令', option: '选项', package: '包名', value: '参数' }
+let history = ['dumpsys battery', 'pm list packages -3']
+
+function suggest(line) {
+  if (!line.trim()) return []
+  const out = []
+  const seen = new Set()
+  const push = (s) => { if (!seen.has(s.label) && out.length < 8) { seen.add(s.label); out.push(s) } }
+  for (const h of history) if (h.length > line.length && h.startsWith(line)) push({ label: h, kind: 'history', del: 0, ins: h.slice(line.length) })
+  const seg = line.split(/\|\||&&|[|;]/).pop().replace(/^\s+/, '')
+  const tokens = seg.split(/\s+/)
+  const word = tokens[tokens.length - 1]
+  let node = SPEC, opt
+  for (const t of tokens.slice(0, -1).filter(Boolean)) {
+    opt = undefined
+    if (node.sub && node.sub[t]) { node = node.sub[t]; continue }
+    const o = node.options && node.options[t]
+    if (o && typeof o !== 'string') opt = o
+  }
+  const target = opt || node
+  const pre = (obj) => obj ? Object.keys(obj).filter((k) => k.startsWith(word) && k !== word) : []
+  const add = (label, kind, desc) => push({ label, kind, desc, del: 0, ins: label.slice(word.length) + ' ' })
+  if (!opt) {
+    for (const k of pre(node.sub)) add(k, 'command', node.sub[k].desc)
+    if (word.startsWith('-')) for (const k of pre(node.options)) add(k, 'option', typeof node.options[k] === 'string' ? node.options[k] : node.options[k].desc)
+  }
+  for (const k of pre(target.values)) add(k, 'value', target.values[k])
+  if (target.packages && word && !word.startsWith('-')) {
+    const lw = word.toLowerCase()
+    PACKAGES.filter((p) => p !== word && p.toLowerCase().includes(lw))
+      .sort((a, b) => Number(!a.startsWith(word)) - Number(!b.startsWith(word)) || a.length - b.length)
+      .forEach((p) => p.startsWith(word) ? add(p, 'package') : push({ label: p, kind: 'package', del: word.length, ins: p + ' ' }))
+  }
+  return out
+}
+
+const input = document.getElementById('try-input')
+const pop = document.getElementById('try-pop')
+const hist = document.getElementById('try-history')
+let items = [], index = 0
+
+function render() {
+  items = suggest(input.value)
+  if (!items.length) { pop.hidden = true; return }
+  index = Math.min(index, items.length - 1)
+  pop.innerHTML = ''
+  items.forEach((s, i) => {
+    const row = document.createElement('div')
+    row.className = 'pop-item' + (i === index ? ' on' : '')
+    const kind = document.createElement('span'); kind.className = 'kind ' + s.kind; kind.textContent = KIND[s.kind]
+    const label = document.createElement('span'); label.textContent = s.label
+    row.append(kind, label)
+    if (s.desc) { const d = document.createElement('span'); d.className = 'pop-desc'; d.textContent = s.desc; row.append(d) }
+    row.addEventListener('mousedown', (e) => { e.preventDefault(); accept(i) })
+    pop.append(row)
+  })
+  const foot = document.createElement('div'); foot.className = 'pop-foot'; foot.textContent = 'Tab / → 补全 · ↑↓ 选择 · Esc 关闭 · Enter 执行'
+  pop.append(foot)
+  pop.hidden = false
+}
+function accept(i) {
+  const s = items[i]
+  input.value = input.value.slice(0, input.value.length - s.del) + s.ins
+  index = 0
+  input.focus()
+  render()
+}
+function run() {
+  const cmd = input.value.trim()
+  const line = document.createElement('div'); line.className = 'try-out'
+  line.textContent = 'OnePlus7Pro:/ $ ' + input.value + (cmd ? '\n（演示页面不会真正执行，已记入历史）' : '')
+  hist.append(line)
+  while (hist.children.length > 3) hist.firstChild.remove()
+  if (cmd) history = [cmd, ...history.filter((h) => h !== cmd)].slice(0, 20)
+  input.value = ''
+  pop.hidden = true
+}
+input.addEventListener('input', () => { index = 0; render() })
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); run(); return }
+  if (pop.hidden) return
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); index = (index + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; render() }
+  else if (e.key === 'Tab' || (e.key === 'ArrowRight' && input.selectionStart === input.value.length)) { e.preventDefault(); accept(index) }
+  else if (e.key === 'Escape') { e.preventDefault(); pop.hidden = true }
+})
+document.querySelectorAll('[data-try]').forEach((b) => b.addEventListener('click', () => {
+  input.value = b.dataset.try; index = 0; input.focus(); render()
+}))
+render()
+</script>
+</body>
+</html>
