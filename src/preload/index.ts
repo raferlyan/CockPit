@@ -36,6 +36,10 @@ const api: CockpitApi = {
   app: {
     onError: (listener) => subscribe(IpcChannel.AppError, listener)
   },
+  theme: {
+    get: () => ipcRenderer.invoke(IpcChannel.ThemeGet),
+    set: (mode) => ipcRenderer.invoke(IpcChannel.ThemeSet, mode)
+  },
   serial: {
     list: () => ipcRenderer.invoke(IpcChannel.SerialList)
   },

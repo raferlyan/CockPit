@@ -4,6 +4,7 @@ import type { AdbStatus, Device } from './models'
 import type { TerminalEvent, TerminalOpenOptions, TerminalSessionInfo } from './terminal'
 import type { SerialOptions, SerialPortInfo } from './serial'
 import type { RemoteEntry, TransferResult } from './files'
+import type { ThemeMode } from './theme'
 
 /** 所有 IPC 通道名集中定义，主进程与 preload 共用 */
 export const IpcChannel = {
@@ -38,6 +39,8 @@ export const IpcChannel = {
   FilesReveal: 'files:reveal',
   ClipboardRead: 'clipboard:read',
   ClipboardWrite: 'clipboard:write',
+  ThemeGet: 'theme:get',
+  ThemeSet: 'theme:set',
   /** 主进程未捕获的异常，推给界面提示 */
   AppError: 'app:error'
 } as const
@@ -76,6 +79,10 @@ export interface CockpitApi {
   }
   app: {
     onError(listener: (message: string) => void): () => void
+  }
+  theme: {
+    get(): Promise<ThemeMode>
+    set(mode: ThemeMode): Promise<void>
   }
   serial: {
     list(): Promise<SerialPortInfo[]>

@@ -1,11 +1,15 @@
 import { useEffect, useRef } from 'react'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
+import { cssVar, useThemeStore } from '../theme/themeStore'
 
 /** 分类色：深色面板上验证过色觉障碍区分度与对比度，按固定顺序分配，不循环 */
 export const SERIES_COLORS = ['#3987e5', '#d95926', '#199e70']
 
-const AXIS = { stroke: '#8b929e', grid: { stroke: '#2c313a', width: 1 }, ticks: { show: false }, font: '10px -apple-system, sans-serif' }
+/** 坐标轴颜色取自当前主题的 CSS 变量，切换主题时重建图表 */
+function axisStyle() {
+  return { stroke: cssVar('--text-dim'), grid: { stroke: cssVar('--border'), width: 1 }, ticks: { show: false }, font: '10px -apple-system, sans-serif' }
+}
 
 export interface ChartSeries {
   label: string
@@ -29,9 +33,11 @@ export function Chart({ series, data, range, unit, height = 150 }: ChartProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const seriesKey = series.map((s) => `${s.label}:${s.color}`).join('|') + (range?.join(',') ?? '')
+  const theme = useThemeStore((s) => s.resolved)
 
   useEffect(() => {
     const host = hostRef.current!
+    const AXIS = axisStyle()
     const format = (v: number | null) => (v == null ? '—' : `${v.toFixed(unit === '%' ? 0 : 1)}${unit}`)
     const plot = new uPlot(
       {
@@ -66,7 +72,7 @@ export function Chart({ series, data, range, unit, height = 150 }: ChartProps) {
       plotRef.current = null
     }
     // data 走下面的 setData，不触发重建
-  }, [seriesKey, unit, height])
+  }, [seriesKey, unit, height, theme])
 
   useEffect(() => {
     const plot = plotRef.current

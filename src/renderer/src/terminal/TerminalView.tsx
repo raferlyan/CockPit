@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Terminal } from '@xterm/xterm'
+import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { api } from '../api'
@@ -8,14 +8,33 @@ import { listenTerminal, type TerminalTab } from './terminalStore'
 import { suggest, type Suggestion } from './completion'
 import { getHistory, getPackages, recordHistory } from './completionSources'
 import { readInputLine } from './inputLine'
+import { useThemeStore, type ResolvedTheme } from '../theme/themeStore'
 
 const isMac = api.platform === 'darwin'
 
-const THEME = {
-  background: '#14161a',
-  foreground: '#e3e6eb',
-  cursor: '#e3e6eb',
-  selectionBackground: '#4c9aff55'
+/** 背景与 styles.css 的 --bg 一致；白天主题把 ANSI 里的白、黄调深，logcat 的 V/W 级别在白底上才看得清 */
+const THEMES: Record<ResolvedTheme, ITheme> = {
+  dark: {
+    background: '#14161a',
+    foreground: '#e3e6eb',
+    cursor: '#e3e6eb',
+    selectionBackground: '#4c9aff55'
+  },
+  light: {
+    background: '#f5f6f8',
+    foreground: '#1b1f24',
+    cursor: '#1b1f24',
+    selectionBackground: '#1f6feb33',
+    black: '#1b1f24',
+    white: '#5f6773',
+    brightWhite: '#1b1f24',
+    yellow: '#9a6700',
+    brightYellow: '#7d5300',
+    green: '#1a7f37',
+    brightGreen: '#116329',
+    cyan: '#0e7490',
+    brightCyan: '#0b5e74'
+  }
 }
 
 /** 用户敲键后这么久内收到的回显才触发提示，避免命令输出刷屏时弹出提示框 */
@@ -51,6 +70,7 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
   const [menu, setMenu] = useState<{ x: number; y: number; hasSelection: boolean } | null>(null)
   const [dropping, setDropping] = useState(false)
   const interactive = tab.kind !== 'logcat'
+  const resolvedTheme = useThemeStore((s) => s.resolved)
 
   const showPopup = (next: Popup | null) => {
     popupRef.current = next
@@ -80,11 +100,11 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
     const term = new Terminal({
       fontFamily: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
       fontSize: 12,
-      theme: THEME,
+      theme: THEMES[useThemeStore.getState().resolved],
       cursorBlink: tab.kind === 'shell',
       disableStdin: tab.kind === 'logcat',
-      // logcat 刷屏快，多留一些
-      scrollback: tab.kind === 'logcat' ? 20_000 : 5_000,
+      // 每行约占 列数×12 字节，120 列时 1 万行约 14 MB；logcat 刷屏快多留一些，shell 够翻看最近输出即可
+      scrollback: tab.kind === 'logcat' ? 10_000 : 3_000,
       macOptionIsMeta: true,
       // Windows 上右键默认会选中单词，这里统一弹出自己的右键菜单
       rightClickSelectsWord: false
@@ -220,6 +240,11 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
     termRef.current?.fit()
     termRef.current?.term.focus()
   }, [active])
+
+  useEffect(() => {
+    const term = termRef.current?.term
+    if (term) term.options.theme = THEMES[resolvedTheme]
+  }, [resolvedTheme])
 
   useEffect(() => {
     if (!tab.exit) return

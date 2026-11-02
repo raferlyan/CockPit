@@ -10,7 +10,31 @@
   --warn: #d29922;
   --err: #f85149;
   --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --shadow: rgb(0 0 0 / 45%);
+  --backdrop: rgb(0 0 0 / 45%);
   color-scheme: dark;
+}
+
+/*
+ * 白天主题。主进程按用户选择设置 nativeTheme.themeSource（白天 / 黑夜 / 自适应），
+ * 页面的 prefers-color-scheme 随之变化，这里只需要一套媒体查询。
+ */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #eceff3;
+    --border: #d8dce3;
+    --text: #1b1f24;
+    --text-dim: #5f6773;
+    --accent: #1f6feb;
+    --ok: #1a7f37;
+    --warn: #9a6700;
+    --err: #cf222e;
+    --shadow: rgb(31 41 55 / 16%);
+    --backdrop: rgb(15 23 42 / 30%);
+    color-scheme: light;
+  }
 }
 
 * {
@@ -835,7 +859,7 @@ button {
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent);
   border-radius: 6px;
-  box-shadow: 0 6px 20px rgb(0 0 0 / 40%);
+  box-shadow: 0 6px 20px var(--shadow);
   pointer-events: auto;
   animation: toast-in 0.15s ease-out;
 }
@@ -938,7 +962,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgb(0 0 0 / 45%);
+  background: var(--backdrop);
 }
 
 .dialog {
@@ -950,7 +974,7 @@ button {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 18px;
-  box-shadow: 0 12px 40px rgb(0 0 0 / 50%);
+  box-shadow: 0 12px 40px var(--shadow);
 }
 
 .dialog .panel-title {
@@ -1239,7 +1263,7 @@ button {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  box-shadow: 0 8px 24px var(--shadow);
   padding: 3px;
   font-size: 12px;
 }
@@ -1308,7 +1332,7 @@ button {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  box-shadow: 0 8px 24px var(--shadow);
   padding: 4px;
 }
 
@@ -1489,4 +1513,16 @@ button.remote-entry:hover {
   display: flex;
   gap: 8px;
   align-items: baseline;
+}
+
+/* ---------- 主题切换 ---------- */
+
+.statusbar .theme-switch {
+  margin-left: 4px;
+}
+
+.statusbar .theme-switch button {
+  font-size: 11px;
+  padding: 0 8px;
+  line-height: 18px;
 }

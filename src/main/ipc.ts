@@ -11,6 +11,8 @@ import type { SerialService } from './serial/SerialService'
 import type { SerialOptions } from '@shared/serial'
 import type { ControlInput, MirrorOptions } from '@shared/mirror'
 import type { FileService } from './files/FileService'
+import type { ThemeMode } from '@shared/theme'
+import { loadTheme, setTheme } from './theme'
 
 export function broadcast(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -98,6 +100,8 @@ export function registerIpc(ctx: {
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
   ipcMain.on(IpcChannel.FilesReveal, (_e, path: string) => electronShell.showItemInFolder(path))
+  ipcMain.handle(IpcChannel.ThemeGet, () => loadTheme())
+  ipcMain.handle(IpcChannel.ThemeSet, (_e, mode: ThemeMode) => setTheme(mode))
   ipcMain.handle(IpcChannel.ClipboardRead, () => clipboard.readText())
   ipcMain.on(IpcChannel.ClipboardWrite, (_e, text: string) => clipboard.writeText(String(text)))
 

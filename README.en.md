@@ -45,7 +45,7 @@
 └──────────┴───────────────────────────────┴────────────────────┘
 ```
 
-Click "Mirror" on the right and the device screen takes the middle while status moves to the right and keeps refreshing; click "Hide mirroring" to go back. Device info stays pinned at the top right, and only the status below it scrolls.
+Click "Mirror" on the right and the device screen takes the middle while status moves to the right and keeps refreshing; click "Hide mirroring" to go back. Device info stays pinned at the top right, and only the status below it scrolls. The bottom status bar switches between light, dark and system-following themes.
 
 ## Device status: see what's eating resources at a glance
 

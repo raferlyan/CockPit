@@ -2,8 +2,8 @@ import { create } from 'zustand'
 import type { LoadSample, MetricsEvent, ProcessInfo, StorageMount } from '@shared/metrics'
 import { api } from '../api'
 
-/** 与主进程环形缓冲一致：10 分钟 */
-const HISTORY_SIZE = 600
+/** 与主进程环形缓冲一致：5 分钟 */
+const HISTORY_SIZE = 300
 
 export interface DeviceMetrics {
   history: LoadSample[]

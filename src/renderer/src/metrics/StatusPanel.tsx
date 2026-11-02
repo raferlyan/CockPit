@@ -7,7 +7,7 @@ import { ensureMetrics, useMetricsStore, type DeviceMetrics } from './metricsSto
 import { Chart, SERIES_COLORS } from './Chart'
 import { alignSeries, BATTERY_STATUS_LABEL, formatKB, formatRate, memoryUsedPercent } from './format'
 
-/** 曲线显示最近 5 分钟（缓冲保留 10 分钟） */
+/** 曲线显示最近 5 分钟，与缓冲长度一致 */
 const CHART_WINDOW_MS = 5 * 60_000
 
 type CompareMetric = 'cpu' | 'memory' | 'cpuTemp'

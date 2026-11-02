@@ -11,6 +11,7 @@ import { MetricsService } from './metrics/MetricsService'
 import { SerialService } from './serial/SerialService'
 import { FileService } from './files/FileService'
 import { IpcChannel } from '@shared/ipc'
+import { applyTheme, loadTheme, windowBackground } from './theme'
 
 let deviceManager: DeviceManager | undefined
 let mirror: MirrorService | undefined
@@ -32,12 +33,14 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     title: 'Cockpit',
-    backgroundColor: '#14161a',
+    backgroundColor: windowBackground(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // 应用里没有需要拼写检查的输入框，关掉可省下词典和检查服务的内存
+      spellcheck: false
     }
   })
 
@@ -91,6 +94,8 @@ process.on('uncaughtException', reportMainError)
 process.on('unhandledRejection', reportMainError)
 
 app.whenReady().then(() => {
+  // 在建窗口前应用保存的主题，首帧就是正确的底色
+  applyTheme(loadTheme())
   void bootstrap()
 
   app.on('activate', () => {

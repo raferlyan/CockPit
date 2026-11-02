@@ -24,8 +24,8 @@ const LOAD_INTERVAL = 1_000
 const BATTERY_EVERY = 5
 const PROCESSES_INTERVAL = 3_000
 const STORAGE_INTERVAL = 10_000
-/** 环形缓冲长度：1s 一条，保留 10 分钟 */
-const HISTORY_SIZE = 600
+/** 环形缓冲长度：1s 一条，保留 5 分钟，正好是曲线显示的范围 */
+const HISTORY_SIZE = 300
 const COMMAND_TIMEOUT = 5_000
 
 /** 单台设备的采集循环。上一轮还没返回时跳过本轮，避免命令在慢设备上堆积 */

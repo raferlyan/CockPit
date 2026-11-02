@@ -330,9 +330,21 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
   useEffect(() => {
     if (hiddenRef.current === hidden) return
     hiddenRef.current = hidden
+    if (document.hidden) return
     workerRef.current?.postMessage({ type: 'visible', visible: !hidden } satisfies WorkerInbound)
     if (!hidden) send({ type: 'resetVideo' })
   }, [hidden, send])
+
+  // 窗口最小化或被遮住时同样停止绘制，省下合成与显存开销；回来时请求关键帧
+  useEffect(() => {
+    const onVisibility = () => {
+      if (hiddenRef.current) return
+      workerRef.current?.postMessage({ type: 'visible', visible: !document.hidden } satisfies WorkerInbound)
+      if (!document.hidden) send({ type: 'resetVideo' })
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [send])
 
   /* ---------------- 渲染 ---------------- */
 

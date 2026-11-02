@@ -10,6 +10,7 @@ import { StatusPanel } from './metrics/StatusPanel'
 import { connectMetrics } from './metrics/metricsStore'
 import { ErrorBoundary } from './notify/ErrorBoundary'
 import { Toaster, useGlobalErrorToasts } from './notify/Toaster'
+import { connectTheme } from './theme/themeStore'
 import { FileTransferDialog } from './files/FileTransferDialog'
 import { useFileStore, usePreventFileNavigation } from './files/fileStore'
 
@@ -18,6 +19,7 @@ export function App() {
   useEffect(() => connectStore(), [])
   useEffect(() => connectTerminals(), [])
   useEffect(() => connectMetrics(), [])
+  useEffect(() => connectTheme(), [])
   usePreventFileNavigation()
   // 默认中间显示设备状态；有投屏窗格时投屏占中间，状态挪到右侧
   const mirroring = useAppStore((s) => s.mirrorTiles.length > 0)
