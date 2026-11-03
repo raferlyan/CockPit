@@ -8,6 +8,7 @@ import {
   parseLoadavg,
   parseMeminfo,
   parseNetDev,
+  parseOperstate,
   parseProcStat,
   parseThermal,
   parseTop,
@@ -15,8 +16,8 @@ import {
 } from './parsers'
 
 describe('loadCommand', () => {
-  it('joins 7 sections and only runs dumpsys when asked', () => {
-    expect(loadCommand(true).split(SEP)).toHaveLength(7)
+  it('joins 8 sections and only runs dumpsys when asked', () => {
+    expect(loadCommand(true).split(SEP)).toHaveLength(8)
     expect(loadCommand(true)).toContain('dumpsys battery')
     expect(loadCommand(false)).not.toContain('dumpsys')
   })
@@ -88,14 +89,25 @@ describe('parseThermal', () => {
 })
 
 describe('parseNetDev', () => {
-  it('sums all interfaces except lo', () => {
+  it('keeps physical interfaces and skips virtual ones', () => {
     const text = `Inter-|   Receive                                                |  Transmit
  face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
     lo:  5000      10    0    0    0     0          0         0     5000      10    0    0    0     0       0          0
  wlan0: 1000000    800    0    0    0     0          0         0   200000     300    0    0    0     0       0          0
-rmnet_data0:     500       5    0    0    0     0          0         0      100       1    0    0    0     0       0          0`
-    expect(parseNetDev(text)).toEqual({ rx: 1000500, tx: 200100 })
+rmnet_ipa0: 900       5    0    0    0     0          0         0      300       1    0    0    0     0       0          0
+rmnet_data0:     500       5    0    0    0     0          0         0      100       1    0    0    0     0       0          0
+  tun0:  7000       5    0    0    0     0          0         0      700       1    0    0    0     0       0          0`
+    expect(parseNetDev(text)).toEqual(
+      new Map([
+        ['wlan0', { rx: 1000000, tx: 200000 }],
+        ['rmnet_data0', { rx: 500, tx: 100 }]
+      ])
+    )
     expect(parseNetDev('')).toBeUndefined()
+  })
+
+  it('reads operstate lines', () => {
+    expect(parseOperstate('wlan0 up\nrmnet_data0 down\ndummy0 unknown\n')).toEqual(new Set(['wlan0']))
   })
 })
 

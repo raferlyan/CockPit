@@ -11,6 +11,8 @@ import type { SerialService } from './serial/SerialService'
 import type { SerialOptions } from '@shared/serial'
 import type { ControlInput, MirrorOptions } from '@shared/mirror'
 import type { FileService } from './files/FileService'
+import type { AppService } from './apps/AppService'
+import type { AppAction, AppPackage } from '@shared/apps'
 import type { ThemeMode } from '@shared/theme'
 import { loadTheme, setTheme } from './theme'
 
@@ -30,14 +32,19 @@ export function registerIpc(ctx: {
   shell?: ShellService
   metrics?: MetricsService
   files?: FileService
+  apps?: AppService
   /** 串口不依赖 adb，总是可用 */
   serial: SerialService
   fallbackStatus: AdbStatus
 }): void {
-  const { adb, deviceManager, mirror, shell, metrics, files, serial } = ctx
+  const { adb, deviceManager, mirror, shell, metrics, files, apps, serial } = ctx
   const requireFiles = () => {
     if (!files) throw new Error('未找到 adb')
     return files
+  }
+  const requireApps = () => {
+    if (!apps) throw new Error('未找到 adb')
+    return apps
   }
 
   ipcMain.handle(IpcChannel.DevicesList, () => deviceManager?.list() ?? [])
@@ -81,9 +88,30 @@ export function registerIpc(ctx: {
 
   ipcMain.handle(IpcChannel.DevicesPackages, (_e, serial: string) => requireFiles().packages(serial))
   ipcMain.handle(IpcChannel.FilesList, (_e, serial: string, dir: string) => requireFiles().list(serial, dir))
-  ipcMain.handle(IpcChannel.FilesPush, (_e, serial: string, localPaths: string[], remoteDir: string) =>
-    requireFiles().push(serial, localPaths, remoteDir)
+  ipcMain.handle(IpcChannel.FilesPush, (event, serial: string, localPaths: string[], remoteDir: string, transferId?: string) =>
+    requireFiles().push(serial, localPaths, remoteDir, (progress) => {
+      if (transferId && !event.sender.isDestroyed()) event.sender.send(IpcChannel.FilesProgress, { transferId, ...progress })
+    })
   )
+  ipcMain.handle(IpcChannel.FilesPickApk, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const options = {
+      title: '选择要安装的 APK',
+      properties: ['openFile', 'multiSelections'] as Array<'openFile' | 'multiSelections'>,
+      filters: [{ name: 'Android 应用', extensions: ['apk'] }]
+    }
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+    return result.canceled ? [] : result.filePaths
+  })
+  ipcMain.handle(IpcChannel.AppsList, (_e, serial: string) => requireApps().list(serial))
+  ipcMain.handle(IpcChannel.AppsRun, (_e, serial: string, pkg: string, action: AppAction, kind: AppPackage['kind']) =>
+    requireApps().run(serial, pkg, action, kind)
+  )
+  ipcMain.handle(IpcChannel.AppsExport, (_e, serial: string, pkg: string, apkPath: string, localDir: string) =>
+    requireApps().exportApk(serial, pkg, apkPath, localDir)
+  )
+  ipcMain.handle(IpcChannel.AppsInstall, (_e, serial: string, apkPaths: string[]) => requireApps().install(serial, apkPaths))
+  ipcMain.handle(IpcChannel.DeviceScreenshot, (_e, serial: string, label: string) => requireApps().screenshot(serial, label))
   ipcMain.handle(IpcChannel.FilesPull, (_e, serial: string, remotePath: string, localDir: string) =>
     requireFiles().pull(serial, remotePath, localDir)
   )

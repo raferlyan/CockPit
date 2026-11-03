@@ -68,6 +68,7 @@ function useRecent(metrics: DeviceMetrics | undefined): LoadSample[] {
 
 function DeviceStatus({ serial }: { serial: string }) {
   const metrics = useMetricsStore((s) => s.byDevice[serial])
+  const wifiAdb = useAppStore((s) => s.devices.find((d) => d.serial === serial)?.connection === 'tcp')
   const recent = useRecent(metrics)
   const latest = metrics?.history.at(-1)
 
@@ -111,7 +112,13 @@ function DeviceStatus({ serial }: { serial: string }) {
           value={battery ? `${battery.level}%` : '—'}
           sub={battery ? `${BATTERY_STATUS_LABEL[battery.status]} · ${battery.temperature.toFixed(1)}°C · ${(battery.voltage / 1000).toFixed(2)}V` : undefined}
         />
-        {net && <Tile label="网络" value={`↓ ${formatRate(net.rxBps)}`} sub={`↑ ${formatRate(net.txBps)}`} />}
+        {net && (
+          <Tile
+            label="网卡吞吐"
+            value={`↓ ${formatRate(net.rxBps)}`}
+            sub={`↑ ${formatRate(net.txBps)}${net.ifaces.length ? ` · ${net.ifaces.filter((i) => i.up).length} 块在线` : ''}`}
+          />
+        )}
         {memory && memory.swapTotalKB > 0 && (
           <Tile label="Swap / ZRAM" value={formatKB(memory.swapTotalKB - memory.swapFreeKB)} sub={`共 ${formatKB(memory.swapTotalKB)}`} />
         )}
@@ -138,6 +145,33 @@ function DeviceStatus({ serial }: { serial: string }) {
             data={thermalData}
             unit="°C"
           />
+        </section>
+      )}
+
+      {net && net.ifaces.length > 0 && (
+        <section className="status-section">
+          <h3 className="status-heading">网卡</h3>
+          <table className="proc-table">
+            <thead>
+              <tr>
+                <th>接口</th>
+                <th className="num">接收</th>
+                <th className="num">发送</th>
+              </tr>
+            </thead>
+            <tbody>
+              {net.ifaces.map((i) => (
+                <tr key={i.name}>
+                  <td className="proc-name mono">
+                    <span className={`dot state-${i.up ? 'ok' : 'off'}`} title={i.up ? '已连接' : '未连接'} /> {i.name}
+                  </td>
+                  <td className="num mono">{formatRate(i.rxBps)}</td>
+                  <td className="num mono">{formatRate(i.txBps)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {wifiAdb && <p className="muted net-note">当前经无线 adb 连接，投屏和终端的流量也会计入 wlan 网卡。</p>}
         </section>
       )}
 

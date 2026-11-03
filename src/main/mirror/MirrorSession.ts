@@ -115,6 +115,8 @@ export class MirrorSession extends EventEmitter<MirrorSessionEvents> {
       `max_size=${o.maxSize}`,
       `video_bit_rate=${o.videoBitRate}`,
       `max_fps=${o.maxFps}`,
+      // 编码器按实时优先级运行、不用 B 帧（B 帧要等后面的帧才能输出）；设备不支持的键会被忽略
+      'video_codec_options=priority:int=0,max-bframes:int=0',
       ...(o.stayAwake ? ['stay_awake=true'] : [])
     ]
     const command = `CLASSPATH=${DEVICE_SERVER_PATH} app_process / com.genymobile.scrcpy.Server ${SCRCPY_VERSION} ${params.join(' ')}`

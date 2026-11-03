@@ -21,3 +21,22 @@ export function parseLsOutput(out: string): RemoteEntry[] {
   }
   return entries.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name))
 }
+
+/**
+ * 列目录的 shell 脚本。不用 `ls -p`：它只给真正的目录加 /，
+ * 根目录下的 /system、/product、/sdcard 等在很多设备上是指向目录的符号链接，会被当成文件。
+ * `[ -d ]` 会跟随符号链接，输出格式与 `ls -1pa` 相同（目录名以 / 结尾）。
+ */
+export function listCommand(dir: string): string {
+  return [
+    `cd ${shellQuote(dir)} || exit 1`,
+    // 有 x 没有 r 权限时 glob 不展开，会得到一个空目录，这里明确报错
+    `[ -r . ] || { echo "Permission denied" >&2; exit 1; }`,
+    `for f in .* *; do [ "$f" = . ] || [ "$f" = .. ] && continue; [ -e "$f" ] || [ -L "$f" ] || continue; if [ -d "$f" ]; then echo "$f/"; else echo "$f"; fi; done`
+  ].join('; ')
+}
+
+/** adb / 设备 shell 报出的权限类错误，换 root 身份可能解决 */
+export function isPermissionError(message: string): boolean {
+  return /permission denied|not permitted|EACCES|EPERM/i.test(message)
+}

@@ -10,6 +10,7 @@ import { ShellService } from './shell/ShellService'
 import { MetricsService } from './metrics/MetricsService'
 import { SerialService } from './serial/SerialService'
 import { FileService } from './files/FileService'
+import { AppService } from './apps/AppService'
 import { IpcChannel } from '@shared/ipc'
 import { applyTheme, loadTheme, windowBackground } from './theme'
 
@@ -18,6 +19,7 @@ let mirror: MirrorService | undefined
 let shellService: ShellService | undefined
 let metrics: MetricsService | undefined
 let files: FileService | undefined
+let apps: AppService | undefined
 const serial = new SerialService()
 
 /** 开发时为项目根目录下的 resources/，打包后为 extraResources 目录 */
@@ -77,9 +79,10 @@ async function bootstrap(): Promise<void> {
     shellService = new ShellService(adbPath)
     metrics = new MetricsService(adb, (event) => broadcast(IpcChannel.MetricsEvent, event))
     files = new FileService(adb)
+    apps = new AppService(adb)
   }
 
-  registerIpc({ adb, deviceManager, mirror, shell: shellService, metrics, files, serial, fallbackStatus })
+  registerIpc({ adb, deviceManager, mirror, shell: shellService, metrics, files, apps, serial, fallbackStatus })
   createWindow()
   void deviceManager?.start()
 }

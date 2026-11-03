@@ -24,9 +24,20 @@ export interface LoadSample {
     skin?: number
   }
   battery?: BatteryState
-  /** 网络速率，字节/秒（排除 lo） */
-  net?: { rxBps: number; txBps: number }
+  /**
+   * 网卡吞吐，字节/秒：所有物理网卡（排除回环、隧道、VPN 等虚拟接口）之和。
+   * 经 Wi-Fi adb 连接时，adb 自身（投屏、终端）的流量也会算在 wlan 上。
+   */
+  net?: { rxBps: number; txBps: number; ifaces: NetIface[] }
   loadavg?: [number, number, number]
+}
+
+export interface NetIface {
+  name: string
+  /** 接口处于 up 状态 */
+  up: boolean
+  rxBps: number
+  txBps: number
 }
 
 export type BatteryStatus = 'charging' | 'discharging' | 'not-charging' | 'full' | 'unknown'

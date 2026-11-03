@@ -10,6 +10,7 @@ import {
   parseLoadavg,
   parseMeminfo,
   parseNetDev,
+  parseOperstate,
   parseProcStat,
   parseThermal,
   parseTop,
@@ -80,7 +81,7 @@ class DevicePoller {
     const withBattery = this.tick++ % BATTERY_EVERY === 0
     const out = await this.adb.shell(this.serial, loadCommand(withBattery), { timeout: COMMAND_TIMEOUT })
     const t = Date.now()
-    const [statText = '', memText = '', freqText = '', thermalText = '', netText = '', loadText = '', batteryText = ''] = out.split(SEP)
+    const [statText = '', memText = '', freqText = '', thermalText = '', netText = '', loadText = '', operText = '', batteryText = ''] = out.split(SEP)
 
     const stat = parseProcStat(statText)
     const prev = this.prevStat
@@ -110,10 +111,22 @@ class DevicePoller {
     }
     if (net && prevNet && t > prevNet.t) {
       const seconds = (t - prevNet.t) / 1000
-      // 接口重置时计数器会变小，速率记为 0
+      const up = parseOperstate(operText)
+      const ifaces = [...net].map(([name, now]) => {
+        const before = prevNet.counters.get(name)
+        // 新出现的接口没有基线；接口重置时计数器会变小，速率记为 0
+        return {
+          name,
+          up: up.has(name),
+          rxBps: before ? Math.max(0, (now.rx - before.rx) / seconds) : 0,
+          txBps: before ? Math.max(0, (now.tx - before.tx) / seconds) : 0
+        }
+      })
       sample.net = {
-        rxBps: Math.max(0, (net.rx - prevNet.counters.rx) / seconds),
-        txBps: Math.max(0, (net.tx - prevNet.counters.tx) / seconds)
+        rxBps: ifaces.reduce((sum, i) => sum + i.rxBps, 0),
+        txBps: ifaces.reduce((sum, i) => sum + i.txBps, 0),
+        // 只保留在线或有流量的接口，按流量排序
+        ifaces: ifaces.filter((i) => i.up || i.rxBps + i.txBps > 0).sort((a, b) => b.rxBps + b.txBps - (a.rxBps + a.txBps))
       }
     }
     if (!sample.cpu && !prev) return

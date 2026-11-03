@@ -15,6 +15,7 @@ export function loadCommand(withBattery: boolean): string {
     'for z in /sys/class/thermal/thermal_zone*; do echo "$(cat $z/type 2>/dev/null) $(cat $z/temp 2>/dev/null)"; done',
     'cat /proc/net/dev',
     'cat /proc/loadavg',
+    'for i in /sys/class/net/*; do echo "${i##*/} $(cat $i/operstate 2>/dev/null)"; done',
     withBattery ? 'dumpsys battery' : 'true'
   ]
   return parts.join(`; echo ${SEP}; `) + '; exit 0'
@@ -105,25 +106,39 @@ function toCelsius(raw: number): number | undefined {
   return Math.round(celsius * 10) / 10
 }
 
-export interface NetCounters {
-  rx: number
-  tx: number
+/** 每块网卡的累计收发字节 */
+export type NetCounters = Map<string, { rx: number; tx: number }>
+
+/**
+ * 不计入吞吐的虚拟接口：回环、隧道、VPN、IPA 硬件加速通道等。
+ * 它们的流量要么不出设备，要么与真实网卡重复计数（如 rmnet_ipa0 与 rmnet_data*、tun0 与 wlan0）。
+ */
+const VIRTUAL_IFACE = /^(lo|dummy|ifb|tun|tap|sit|ip6tnl|ip_vti|ip6_vti|ip6gre|gre|gretap|erspan|tunl|rmnet_ipa|r_rmnet|veth|clat|v4-)/
+
+export function isPhysicalIface(name: string): boolean {
+  return !VIRTUAL_IFACE.test(name)
 }
 
 export function parseNetDev(text: string): NetCounters | undefined {
-  let rx = 0
-  let tx = 0
-  let found = false
+  const counters: NetCounters = new Map()
   for (const line of text.split(/\r?\n/)) {
     const match = line.match(/^\s*([^\s:]+):\s*(.+)$/)
-    if (!match || match[1] === 'lo') continue
+    if (!match || !isPhysicalIface(match[1])) continue
     const values = match[2].trim().split(/\s+/).map(Number)
     if (values.length < 9) continue
-    rx += values[0] || 0
-    tx += values[8] || 0
-    found = true
+    counters.set(match[1], { rx: values[0] || 0, tx: values[8] || 0 })
   }
-  return found ? { rx, tx } : undefined
+  return counters.size ? counters : undefined
+}
+
+/** `/sys/class/net/<if>/operstate`：up / down / unknown / dormant…，返回处于 up 的接口 */
+export function parseOperstate(text: string): Set<string> {
+  const up = new Set<string>()
+  for (const line of text.split(/\r?\n/)) {
+    const [name, state] = line.trim().split(/\s+/)
+    if (name && state === 'up') up.add(name)
+  }
+  return up
 }
 
 export function parseLoadavg(text: string): [number, number, number] | undefined {

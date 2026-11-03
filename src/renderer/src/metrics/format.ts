@@ -6,6 +6,11 @@ export function formatKB(kb: number): string {
   return `${kb} KB`
 }
 
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${Math.round(bytes)} B`
+  return formatKB(Math.round(bytes / 1024))
+}
+
 export function formatRate(bytesPerSecond: number): string {
   if (bytesPerSecond >= 1024 ** 2) return `${(bytesPerSecond / 1024 ** 2).toFixed(1)} MB/s`
   if (bytesPerSecond >= 1024) return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`

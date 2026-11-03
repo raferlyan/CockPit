@@ -59,6 +59,25 @@ export class AdbClient {
     })
   }
 
+  /** 输出为二进制的命令，如 `exec-out screencap -p` */
+  execBuffer(args: string[], options: ExecOptions = {}): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      execFile(
+        this.adbPath,
+        args,
+        { timeout: options.timeout ?? DEFAULT_TIMEOUT, maxBuffer: 128 * 1024 * 1024, windowsHide: true, encoding: 'buffer' },
+        (error, stdout, stderr) => {
+          if (error) {
+            const reason = error.killed ? `timed out after ${options.timeout ?? DEFAULT_TIMEOUT}ms` : stderr.toString().trim() || `exit code ${error.code}`
+            reject(new AdbError(`adb ${args.join(' ')}: ${reason}`, stderr.toString(), error.code ?? undefined))
+            return
+          }
+          resolve(stdout)
+        }
+      )
+    })
+  }
+
   /** 在设备上执行 shell 命令，按设备限流 */
   shell(serial: string, command: string, options: ExecOptions = {}): Promise<string> {
     return this.limiter(serial).run(() => this.exec(['-s', serial, 'shell', command], options))

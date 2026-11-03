@@ -9,6 +9,7 @@ import { suggest, type Suggestion } from './completion'
 import { getHistory, getPackages, recordHistory } from './completionSources'
 import { readInputLine } from './inputLine'
 import { useThemeStore, type ResolvedTheme } from '../theme/themeStore'
+import { monoFontStack, useSettingsStore } from '../settings/settingsStore'
 
 const isMac = api.platform === 'darwin'
 
@@ -71,6 +72,8 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
   const [dropping, setDropping] = useState(false)
   const interactive = tab.kind !== 'logcat'
   const resolvedTheme = useThemeStore((s) => s.resolved)
+  const monoFont = useSettingsStore((s) => s.monoFont)
+  const fontSize = useSettingsStore((s) => s.terminalFontSize)
 
   const showPopup = (next: Popup | null) => {
     popupRef.current = next
@@ -98,8 +101,8 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
   useEffect(() => {
     const host = hostRef.current!
     const term = new Terminal({
-      fontFamily: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
-      fontSize: 12,
+      fontFamily: monoFontStack(useSettingsStore.getState().monoFont),
+      fontSize: useSettingsStore.getState().terminalFontSize,
       theme: THEMES[useThemeStore.getState().resolved],
       cursorBlink: tab.kind === 'shell',
       disableStdin: tab.kind === 'logcat',
@@ -245,6 +248,15 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
     const term = termRef.current?.term
     if (term) term.options.theme = THEMES[resolvedTheme]
   }, [resolvedTheme])
+
+  // 字体或字号变了，行列数随之变化，需要重新 fit 并通知设备端
+  useEffect(() => {
+    const current = termRef.current
+    if (!current) return
+    current.term.options.fontFamily = monoFontStack(monoFont)
+    current.term.options.fontSize = fontSize
+    current.fit()
+  }, [monoFont, fontSize])
 
   useEffect(() => {
     if (!tab.exit) return

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseLsOutput, remoteJoin, shellQuote } from './remotePath'
+import { isPermissionError, listCommand, parseLsOutput, remoteJoin, shellQuote } from './remotePath'
 
 describe('remotePath', () => {
   it('parses ls -1pa output with directories first', () => {
@@ -18,5 +18,18 @@ describe('remotePath', () => {
   it('joins remote paths without doubling slashes', () => {
     expect(remoteJoin('/sdcard/Download/', 'a.apk')).toBe('/sdcard/Download/a.apk')
     expect(remoteJoin('/', 'a.apk')).toBe('/a.apk')
+  })
+})
+
+describe('listCommand', () => {
+  it('marks symlinked directories with [ -d ] instead of ls -p', () => {
+    const cmd = listCommand("/it's")
+    expect(cmd).toContain(`cd '/it'\\''s'`)
+    expect(cmd).toContain('[ -d "$f" ]')
+  })
+
+  it('recognizes permission errors', () => {
+    expect(isPermissionError("adb: error: failed to stat remote object '/data/x': Permission denied")).toBe(true)
+    expect(isPermissionError('No such file or directory')).toBe(false)
   })
 })

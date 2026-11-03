@@ -13,9 +13,13 @@ export interface MirrorOptions {
   stayAwake?: boolean
 }
 
+/**
+ * 默认偏向低延迟：每帧数据越小，编码、USB 传输和解码各环节排队越少。
+ * 1080 长边在桌面窗格里已经够清晰，码率 4 Mbps 对手机界面足够。
+ */
 export const DEFAULT_MIRROR_OPTIONS: Required<MirrorOptions> = {
-  maxSize: 1280,
-  videoBitRate: 6_000_000,
+  maxSize: 1080,
+  videoBitRate: 4_000_000,
   maxFps: 60,
   videoCodec: 'h264',
   stayAwake: false

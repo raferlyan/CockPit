@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webFrame, webUtils, type IpcRendererEvent } from 'electron'
 import { IpcChannel, MIRROR_PORT_MESSAGE, type CockpitApi } from '@shared/ipc'
 
 // MessagePort 不能经 contextBridge 传递，改用 window.postMessage 转交给页面
@@ -34,7 +34,17 @@ const api: CockpitApi = {
     onEvent: (listener) => subscribe(IpcChannel.MirrorEvent, listener)
   },
   app: {
-    onError: (listener) => subscribe(IpcChannel.AppError, listener)
+    onError: (listener) => subscribe(IpcChannel.AppError, listener),
+    setZoom: (factor) => webFrame.setZoomFactor(Math.min(Math.max(factor, 0.7), 1.6))
+  },
+  apps: {
+    list: (serial) => ipcRenderer.invoke(IpcChannel.AppsList, serial),
+    run: (serial, pkg, action, kind) => ipcRenderer.invoke(IpcChannel.AppsRun, serial, pkg, action, kind),
+    exportApk: (serial, pkg, apkPath, localDir) => ipcRenderer.invoke(IpcChannel.AppsExport, serial, pkg, apkPath, localDir),
+    install: (serial, apkPaths) => ipcRenderer.invoke(IpcChannel.AppsInstall, serial, apkPaths)
+  },
+  device: {
+    screenshot: (serial, label) => ipcRenderer.invoke(IpcChannel.DeviceScreenshot, serial, label)
   },
   theme: {
     get: () => ipcRenderer.invoke(IpcChannel.ThemeGet),
@@ -56,7 +66,9 @@ const api: CockpitApi = {
     pickLocal: () => ipcRenderer.invoke(IpcChannel.FilesPickLocal),
     pickDirectory: () => ipcRenderer.invoke(IpcChannel.FilesPickDirectory),
     list: (serial, dir) => ipcRenderer.invoke(IpcChannel.FilesList, serial, dir),
-    push: (serial, localPaths, remoteDir) => ipcRenderer.invoke(IpcChannel.FilesPush, serial, localPaths, remoteDir),
+    push: (serial, localPaths, remoteDir, transferId) => ipcRenderer.invoke(IpcChannel.FilesPush, serial, localPaths, remoteDir, transferId),
+    onProgress: (listener) => subscribe(IpcChannel.FilesProgress, listener),
+    pickApk: () => ipcRenderer.invoke(IpcChannel.FilesPickApk),
     pull: (serial, remotePath, localDir) => ipcRenderer.invoke(IpcChannel.FilesPull, serial, remotePath, localDir),
     reveal: (path) => ipcRenderer.send(IpcChannel.FilesReveal, path)
   },

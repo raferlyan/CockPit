@@ -16,7 +16,9 @@ const LABELS: Record<string, string> = {
   'terminal.close': '关闭终端',
   'serial.list': '扫描串口',
   'metrics.snapshot': '读取设备状态',
-  'files.list': '读取设备目录'
+  'files.list': '读取设备目录',
+  'apps.list': '扫描应用',
+  'device.screenshot': '截图'
 }
 
 function watch<T>(label: string, promise: Promise<T>): Promise<T> {

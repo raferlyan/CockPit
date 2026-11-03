@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { RemoteEntry, TransferResult } from '@shared/files'
+import type { RemoteEntry, TransferProgress, TransferResult } from '@shared/files'
 import { api } from '../api'
 import { useAppStore } from '../store'
 import { deviceTitle } from '../labels'
 import { ActionButton } from '../notify/ActionButton'
 import { errorMessage, notify } from '../notify/notifyStore'
 import { droppedPaths, hasDraggedFiles, useFileStore } from './fileStore'
+import { formatBytes, formatRate } from '../metrics/format'
 
 const DIR_KEY = 'cockpit.transfer.dir'
 const DEFAULT_DIR = '/sdcard/Download'
@@ -58,6 +59,7 @@ export function FileTransferDialog() {
   const [busy, setBusy] = useState<string | null>(null)
   const [log, setLog] = useState<LogItem[]>([])
   const [dropping, setDropping] = useState(false)
+  const [progress, setProgress] = useState<(TransferProgress & { startedAt: number }) | null>(null)
 
   const browse = useCallback(
     async (target: string) => {
@@ -89,9 +91,14 @@ export function FileTransferDialog() {
 
   const upload = async () => {
     const target = dirInput.trim() || dir
+    const transferId = crypto.randomUUID()
+    const startedAt = Date.now()
     setBusy(`正在上传 ${transfer.files.length} 个文件…`)
+    const off = api.files.onProgress((event) => {
+      if (event.transferId === transferId) setProgress({ ...event, startedAt })
+    })
     try {
-      const results = await api.files.push(transfer.serial, transfer.files, target)
+      const results = await api.files.push(transfer.serial, transfer.files, target, transferId)
       setLog((l) => [...results.map((r) => ({ ...r, direction: 'push' as const })), ...l])
       const failed = results.filter((r) => !r.ok)
       if (failed.length) notify('error', `${failed.length} 个文件上传失败`, failed[0].message)
@@ -101,6 +108,8 @@ export function FileTransferDialog() {
     } catch (error) {
       notify('error', '上传失败', errorMessage(error))
     } finally {
+      off()
+      setProgress(null)
       setBusy(null)
     }
   }
@@ -223,8 +232,10 @@ export function FileTransferDialog() {
           </section>
         </div>
 
+        {progress && <UploadProgress progress={progress} />}
+
         <div className="dialog-actions">
-          {busy && <span className="muted">{busy}</span>}
+          {busy && !progress && <span className="muted">{busy}</span>}
           <span className="spacer" />
           <ActionButton className="primary" disabledReason={uploadReason} onClick={() => void upload()}>
             {transfer.files.length ? `上传 ${transfer.files.length} 个文件到 ` : '上传到 '}
@@ -253,4 +264,38 @@ export function FileTransferDialog() {
       </div>
     </div>
   )
+}
+
+function UploadProgress({ progress }: { progress: TransferProgress & { startedAt: number } }) {
+  const percent = progress.total ? Math.min(100, (progress.sent / progress.total) * 100) : 0
+  const seconds = (Date.now() - progress.startedAt) / 1000
+  const speed = seconds > 0.5 ? progress.sent / seconds : 0
+  const remaining = speed > 0 ? (progress.total - progress.sent) / speed : 0
+  const filePercent = progress.fileTotal ? Math.min(100, (progress.fileSent / progress.fileTotal) * 100) : null
+
+  return (
+    <div className="upload-progress" role="progressbar" aria-valuenow={Math.round(percent)} aria-valuemin={0} aria-valuemax={100}>
+      <div className="upload-progress-head">
+        <span className="mono upload-progress-name" title={progress.name}>
+          {progress.count > 1 && `(${progress.index + 1}/${progress.count}) `}
+          {progress.name}
+          {filePercent !== null && progress.count > 1 && ` · ${filePercent.toFixed(0)}%`}
+        </span>
+        <span className="mono">
+          {percent.toFixed(0)}% · {formatBytes(progress.sent)} / {formatBytes(progress.total)}
+          {speed > 0 && ` · ${formatRate(speed)}`}
+          {speed > 0 && remaining >= 1 && ` · 剩余 ${formatDuration(remaining)}`}
+        </span>
+      </div>
+      <div className="bar">
+        <div className="bar-fill" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.ceil(seconds)} 秒`
+  const minutes = Math.floor(seconds / 60)
+  return `${minutes} 分 ${Math.ceil(seconds % 60)} 秒`
 }

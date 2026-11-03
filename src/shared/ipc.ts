@@ -3,7 +3,8 @@ import type { ControlInput, MirrorEvent, MirrorOptions, MirrorSessionInfo } from
 import type { AdbStatus, Device } from './models'
 import type { TerminalEvent, TerminalOpenOptions, TerminalSessionInfo } from './terminal'
 import type { SerialOptions, SerialPortInfo } from './serial'
-import type { RemoteEntry, TransferResult } from './files'
+import type { RemoteEntry, TransferProgressEvent, TransferResult } from './files'
+import type { AppAction, AppPackage, InstallResult } from './apps'
 import type { ThemeMode } from './theme'
 
 /** 所有 IPC 通道名集中定义，主进程与 preload 共用 */
@@ -37,6 +38,14 @@ export const IpcChannel = {
   FilesPickLocal: 'files:pickLocal',
   FilesPickDirectory: 'files:pickDirectory',
   FilesReveal: 'files:reveal',
+  /** 主进程 → 渲染进程，上传进度 */
+  FilesProgress: 'files:progress',
+  FilesPickApk: 'files:pickApk',
+  AppsList: 'apps:list',
+  AppsRun: 'apps:run',
+  AppsExport: 'apps:export',
+  AppsInstall: 'apps:install',
+  DeviceScreenshot: 'device:screenshot',
   ClipboardRead: 'clipboard:read',
   ClipboardWrite: 'clipboard:write',
   ThemeGet: 'theme:get',
@@ -79,6 +88,21 @@ export interface CockpitApi {
   }
   app: {
     onError(listener: (message: string) => void): () => void
+    /** 整体界面缩放（字号、间距一起放大），1 为原始大小 */
+    setZoom(factor: number): void
+  }
+  apps: {
+    /** 全量扫描设备上的应用（含系统应用、已对当前用户卸载的系统应用） */
+    list(serial: string): Promise<AppPackage[]>
+    /** 卸载、恢复、停用、启用、强制停止、清除数据；返回 pm 的输出 */
+    run(serial: string, pkg: string, action: AppAction, kind: AppPackage['kind']): Promise<string>
+    /** 把 base.apk 下载到本机目录，返回本机文件路径 */
+    exportApk(serial: string, pkg: string, apkPath: string, localDir: string): Promise<string>
+    install(serial: string, apkPaths: string[]): Promise<InstallResult[]>
+  }
+  device: {
+    /** 原始分辨率截图，保存到本机图片目录并复制到剪贴板，返回文件路径 */
+    screenshot(serial: string, label: string): Promise<string>
   }
   theme: {
     get(): Promise<ThemeMode>
@@ -105,7 +129,11 @@ export interface CockpitApi {
     /** 系统对话框选择本机目录，取消时返回 null */
     pickDirectory(): Promise<string | null>
     list(serial: string, dir: string): Promise<RemoteEntry[]>
-    push(serial: string, localPaths: string[], remoteDir: string): Promise<TransferResult[]>
+    /** transferId 用来在 onProgress 里认出本次上传的进度 */
+    push(serial: string, localPaths: string[], remoteDir: string, transferId?: string): Promise<TransferResult[]>
+    onProgress(listener: (event: TransferProgressEvent) => void): () => void
+    /** 系统对话框选择 APK，取消时返回空数组 */
+    pickApk(): Promise<string[]>
     pull(serial: string, remotePath: string, localDir: string): Promise<TransferResult>
     /** 在 Finder / 资源管理器中显示 */
     reveal(path: string): void

@@ -11,3 +11,20 @@ export interface TransferResult {
   ok: boolean
   message: string
 }
+
+/** 上传进度：sent / total 为本批所有文件的累计字节数（目录不计大小） */
+export interface TransferProgress {
+  /** 当前文件在本批中的下标 */
+  index: number
+  count: number
+  name: string
+  fileSent: number
+  fileTotal: number
+  sent: number
+  total: number
+}
+
+/** 主进程推给界面的上传进度，transferId 由界面发起上传时生成 */
+export interface TransferProgressEvent extends TransferProgress {
+  transferId: string
+}

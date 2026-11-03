@@ -31,6 +31,9 @@ let pendingConfig: Uint8Array | undefined
 let waitingKeyframe = true
 let frames = 0
 let visible = true
+/** 解码队列积压到这么多帧就丢掉后续的非关键帧并请求关键帧，宁可跳帧也不让画面越来越滞后 */
+const MAX_DECODE_QUEUE = 3
+let lastKeyframeRequest = 0
 
 const post = (msg: WorkerOutbound) => self.postMessage(msg)
 
@@ -102,6 +105,15 @@ function onVideo(msg: VideoMessage): void {
         else return
       }
       if (waitingKeyframe && !msg.key) return
+      if (!msg.key && decoder!.decodeQueueSize >= MAX_DECODE_QUEUE) {
+        waitingKeyframe = true
+        const now = performance.now()
+        if (now - lastKeyframeRequest > 500) {
+          lastKeyframeRequest = now
+          post({ type: 'needKeyframe' })
+        }
+        return
+      }
       // H.264 Annex-B：SPS/PPS 需与关键帧拼在一起送入解码器
       const data = msg.key && pendingConfig ? concat(pendingConfig, msg.data) : msg.data
       decoder!.decode(new EncodedVideoChunk({ type: msg.key ? 'key' : 'delta', timestamp: msg.pts, data }))

@@ -8,7 +8,8 @@ import { deviceTitle } from '../labels'
 import { discardMirrorPort, takeMirrorPort } from './portRegistry'
 import { AndroidKey, isInjectableText, metaStateOf, shouldSendAsKeycode, toAndroidKeycode } from './keyboard'
 import type { WorkerInbound, WorkerOutbound } from './decoder.worker'
-import { droppedPaths, hasDraggedFiles, useFileStore } from '../files/fileStore'
+import { droppedPaths, handleDeviceDrop, hasDraggedFiles } from '../files/fileStore'
+import { takeScreenshot } from '../apps/screenshot'
 
 type ViewState = 'idle' | 'starting' | 'running' | 'error'
 interface Size {
@@ -27,7 +28,7 @@ function isShortcut(e: { metaKey: boolean; ctrlKey: boolean }): boolean {
  * 多台同时投屏时降低分辨率、码率和帧率，减轻 USB 带宽和解码压力。
  * 在开始投屏时按当时的窗格数决定，已在投屏的会话不受影响。
  */
-const GRID_OPTIONS: MirrorOptions = { maxSize: 1024, videoBitRate: 4_000_000, maxFps: 30 }
+const GRID_OPTIONS: MirrorOptions = { maxSize: 864, videoBitRate: 2_500_000, maxFps: 30 }
 
 interface MirrorViewProps {
   device: Device
@@ -373,7 +374,7 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
         const paths = droppedPaths(e)
         if (!paths.length) return
         e.preventDefault()
-        useFileStore.getState().openTransfer(device.serial, paths)
+        handleDeviceDrop(device.serial, paths)
       }}
     >
       <div className="mirror-toolbar">
@@ -395,6 +396,7 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
           <ToolButton label="电源" short="电源" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.POWER)} />
           <ToolButton label="通知栏" short="通知" disabledReason={keysDisabled} onClick={() => send({ type: 'expandNotificationPanel' })} />
           <ToolButton label="旋转" short="⟳" disabledReason={keysDisabled} onClick={() => send({ type: 'rotateDevice' })} />
+          <ToolButton label="截图" short="📷" onClick={() => void takeScreenshot(device)} />
         </div>
         {running || state === 'starting' ? (
           <ActionButton className="secondary" onClick={stop} disabledReason={state === 'starting' && STARTING_REASON}>
@@ -429,7 +431,7 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
         {running && !videoSize && <p className="mirror-hint">等待画面…</p>}
         {state === 'idle' && <p className="mirror-hint">点击「开始投屏」</p>}
         {state === 'error' && <p className="mirror-hint error">投屏失败：{error}</p>}
-        {dropping && <p className="mirror-drop-hint">松开鼠标，选择设备上的目标目录后上传</p>}
+        {dropping && <p className="mirror-drop-hint">松开鼠标：APK 直接安装，其它文件选择目录后上传</p>}
         <textarea
           ref={imeRef}
           className="mirror-ime"

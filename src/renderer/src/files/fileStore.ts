@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import { api } from '../api'
+import { errorMessage, notify, updateToast } from '../notify/notifyStore'
 
 interface Transfer {
   serial: string
@@ -57,4 +58,28 @@ export function usePreventFileNavigation(): void {
       window.removeEventListener('drop', prevent)
     }
   }, [])
+}
+
+const isApk = (path: string) => /\.apk$/i.test(path)
+
+/** 安装 APK，进度和结果用同一条提示原地更新 */
+export async function installApks(serial: string, paths: string[]): Promise<void> {
+  const names = paths.map((p) => p.split(/[\\/]/).pop()).join('、')
+  const toast = notify('info', `正在安装 ${paths.length > 1 ? `${paths.length} 个应用` : names}…`, '大的应用可能需要几十秒，部分设备会在手机上弹出确认')
+  try {
+    const results = await api.apps.install(serial, paths)
+    const failed = results.filter((r) => !r.ok)
+    if (!failed.length) updateToast(toast, 'success', `已安装 ${names}`)
+    else updateToast(toast, 'error', `${failed.length} 个应用安装失败`, failed.map((r) => `${r.path.split(/[\\/]/).pop()}：${r.message}`).join('\n'))
+  } catch (error) {
+    updateToast(toast, 'error', '安装失败', errorMessage(error))
+  }
+}
+
+/** 拖到设备上的文件：APK 直接安装，其它文件打开传输对话框 */
+export function handleDeviceDrop(serial: string, paths: string[]): void {
+  const apks = paths.filter(isApk)
+  const others = paths.filter((p) => !isApk(p))
+  if (apks.length) void installApks(serial, apks)
+  if (others.length) useFileStore.getState().openTransfer(serial, others)
 }

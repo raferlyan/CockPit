@@ -1,13 +1,17 @@
+import { useState } from 'react'
 import { api } from '../api'
 import { useAppStore } from '../store'
 import { deviceTitle, STATE_LABEL, stateHint } from '../labels'
 import { RootBadge } from './RootBadge'
 import { ActionButton } from '../notify/ActionButton'
-import { useFileStore } from '../files/fileStore'
+import { droppedPaths, handleDeviceDrop, hasDraggedFiles, useFileStore } from '../files/fileStore'
+import { useUiStore } from '../settings/uiStore'
+import { takeScreenshot } from '../apps/screenshot'
 
 export function DeviceDetail() {
   const device = useAppStore((s) => s.devices.find((d) => d.serial === s.focusedSerial))
   const mirrored = useAppStore((s) => (device ? s.mirrorTiles.includes(device.serial) : false))
+  const [dropping, setDropping] = useState(false)
 
   if (!device) {
     return (
@@ -32,8 +36,25 @@ export function DeviceDetail() {
     ['分辨率', info?.resolution]
   ]
 
+  const online = device.state === 'device'
   return (
-    <section className="panel">
+    <section
+      className={`panel device-detail${dropping ? ' dropping' : ''}`}
+      onDragOver={(e) => {
+        if (!online || !hasDraggedFiles(e)) return
+        e.preventDefault()
+        setDropping(true)
+      }}
+      onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setDropping(false)}
+      onDrop={(e) => {
+        setDropping(false)
+        const paths = droppedPaths(e)
+        if (!online || !paths.length) return
+        e.preventDefault()
+        handleDeviceDrop(device.serial, paths)
+      }}
+    >
+      {dropping && <div className="panel-drop-hint">松开鼠标：APK 直接安装，其它文件上传</div>}
       <div className="panel-title-row">
         <h2 className="panel-title">{deviceTitle(device)}</h2>
         {device.state === 'device' && <RootBadge state={device.root} />}
@@ -65,6 +86,12 @@ export function DeviceDetail() {
         </ActionButton>
         <ActionButton className="secondary" disabledReason={offlineReason} onClick={() => useFileStore.getState().openTransfer(device.serial)}>
           文件传输
+        </ActionButton>
+        <ActionButton className="secondary" disabledReason={offlineReason} onClick={() => useUiStore.getState().openApps(device.serial)}>
+          应用管理
+        </ActionButton>
+        <ActionButton className="secondary" disabledReason={offlineReason} onClick={() => void takeScreenshot(device)}>
+          截图
         </ActionButton>
         {device.connection === 'tcp' && (
           <button className="secondary" onClick={() => void api.adb.disconnect(device.serial)}>
