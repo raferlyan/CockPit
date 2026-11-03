@@ -11,7 +11,7 @@ export function ThemeSwitch() {
   const mode = useThemeStore((s) => s.mode)
   const setMode = useThemeStore((s) => s.setMode)
   return (
-    <div className="segmented theme-switch" role="radiogroup" aria-label="界面主题">
+    <div className="segmented theme-switch" data-tour="theme" role="radiogroup" aria-label="界面主题">
       {OPTIONS.map((o) => (
         <button key={o.mode} role="radio" aria-checked={mode === o.mode} className={mode === o.mode ? 'on' : ''} title={o.title} onClick={() => setMode(o.mode)}>
           {o.label}

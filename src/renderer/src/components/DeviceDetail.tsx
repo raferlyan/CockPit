@@ -19,7 +19,7 @@ export function DeviceDetail() {
 
   if (!device) {
     return (
-      <section className="panel">
+      <section className="panel" data-tour="device-detail">
         <div className="panel-title-row">
           <h2 className="panel-title">设备信息</h2>
           <CollapseButton pane="side" />
@@ -47,6 +47,7 @@ export function DeviceDetail() {
   return (
     <section
       className={`panel device-detail${dropping ? ' dropping' : ''}`}
+      data-tour="device-detail"
       onDragOver={(e) => {
         if (!online || !hasDraggedFiles(e)) return
         e.preventDefault()
@@ -88,22 +89,27 @@ export function DeviceDetail() {
       )}
       <div className="detail-actions">
         <ActionButton
+          data-tour="btn-mirror"
           className={mirrored ? 'secondary' : 'primary'}
           disabledReason={offlineReason}
           onClick={() => (mirrored ? useAppStore.getState().removeTile(device.serial) : useAppStore.getState().addTile(device.serial))}
         >
           {mirrored ? '停止投屏' : '投屏'}
         </ActionButton>
-        <ActionButton className="secondary" disabledReason={offlineReason} onClick={() => useFileStore.getState().openTransfer(device.serial)}>
+        <ActionButton
+          data-tour="btn-transfer" className="secondary" disabledReason={offlineReason} onClick={() => useFileStore.getState().openTransfer(device.serial)}>
           文件传输
         </ActionButton>
-        <ActionButton className="secondary" disabledReason={offlineReason} onClick={() => useUiStore.getState().openApps(device.serial)}>
+        <ActionButton
+          data-tour="btn-apps" className="secondary" disabledReason={offlineReason} onClick={() => useUiStore.getState().openApps(device.serial)}>
           应用管理
         </ActionButton>
-        <ActionButton className="secondary" disabledReason={offlineReason} onClick={() => void takeScreenshot(device)}>
+        <ActionButton
+          data-tour="btn-screenshot" className="secondary" disabledReason={offlineReason} onClick={() => void takeScreenshot(device)}>
           截图
         </ActionButton>
         <ActionButton
+          data-tour="btn-trace"
           className={tracing ? 'primary' : 'secondary'}
           disabledReason={!tracing && offlineReason}
           title="用设备自带的 perfetto 录制系统 trace，录完在内嵌的 Perfetto 中打开"

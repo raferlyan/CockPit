@@ -18,7 +18,7 @@ import { useUiStore } from './settings/uiStore'
 import { Splitter } from './settings/Splitter'
 import { ToolStripe, useToolWindowShortcuts } from './settings/ToolStripe'
 import { SettingsDialog } from './settings/SettingsDialog'
-import { GuideDialog } from './settings/GuideDialog'
+import { GuideTour } from './settings/GuideTour'
 import { AppManagerDialog } from './apps/AppManagerDialog'
 import { TraceView } from './trace/TraceView'
 import { RecordTraceDialog } from './trace/RecordTraceDialog'
@@ -133,7 +133,7 @@ export function App() {
       {appsSerial && <AppManagerDialog serial={appsSerial} />}
       {traceDialogSerial && <RecordTraceDialog serial={traceDialogSerial} />}
       {settingsOpen && <SettingsDialog />}
-      {guideOpen && <GuideDialog />}
+      {guideOpen && <GuideTour />}
       <Toaster />
     </div>
   )

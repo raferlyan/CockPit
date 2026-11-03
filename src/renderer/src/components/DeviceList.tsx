@@ -14,7 +14,7 @@ export function DeviceList() {
   const focus = useAppStore((s) => s.focus)
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" data-tour="device-list">
       <header className="sidebar-header">
         <span>设备</span>
         <span className="sidebar-header-end">
@@ -83,7 +83,7 @@ function ConnectForm() {
   }
 
   return (
-    <form className="connect-form" onSubmit={submit}>
+    <form className="connect-form" data-tour="connect" onSubmit={submit}>
       <label htmlFor="connect-address">无线连接</label>
       <div className="connect-row">
         <input

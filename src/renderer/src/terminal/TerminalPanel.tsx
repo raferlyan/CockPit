@@ -84,7 +84,7 @@ export function TerminalPanel() {
             </button>
           </form>
         ) : (
-          <>
+          <span className="terminal-actions" data-tour="terminal-actions">
             <ActionButton className="tool" disabledReason={noDeviceReason} onClick={() => focused && void open(focused.serial, 'shell')}>
               + Shell
             </ActionButton>
@@ -94,7 +94,7 @@ export function TerminalPanel() {
             <button className="tool" onClick={() => setSerialOpen(true)}>
               + 串口
             </button>
-          </>
+          </span>
         )}
         <CollapseButton pane="terminal" />
       </div>

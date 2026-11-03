@@ -4,7 +4,7 @@ import { useUiStore } from '../settings/uiStore'
 
 function SettingsButton() {
   return (
-    <button className="statusbar-button" title="字号、字体、布局与使用向导" onClick={() => useUiStore.getState().setSettingsOpen(true)}>
+    <button className="statusbar-button" data-tour="settings" title="字号、字体、布局与使用向导" onClick={() => useUiStore.getState().setSettingsOpen(true)}>
       ⚙ 设置
     </button>
   )
@@ -15,6 +15,7 @@ function PerfettoButton() {
   return (
     <button
       className={`statusbar-button${open ? ' on' : ''}`}
+      data-tour="perfetto"
       title="在中间区域打开内嵌的 Perfetto，查看和分析 trace 文件"
       onClick={() => useUiStore.getState().setTraceOpen(!open)}
     >

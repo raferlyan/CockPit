@@ -33,7 +33,7 @@ export function StatusPanel({ wide = false }: { wide?: boolean }) {
   const showCompare = compare && online.length > 1
 
   return (
-    <section className={`panel status-panel${wide ? ' wide' : ''}`}>
+    <section className={`panel status-panel${wide ? ' wide' : ''}`} data-tour="status">
       <div className="panel-title-row">
         <h2 className="panel-title">设备状态</h2>
         {online.length > 1 && (

@@ -45,7 +45,7 @@ export function TraceView() {
   const src = base && (trace ? `${base}#!/?${traceQuery(trace)}` : base)
 
   return (
-    <section className="trace-area">
+    <section className="trace-area" data-tour="trace-view">
       <div className="mirror-bar">
         <strong>Perfetto</strong>
         {trace && (
@@ -54,10 +54,10 @@ export function TraceView() {
           </span>
         )}
         <span className="spacer" />
-        <button className={`tool${listOpen ? ' on' : ''}`} title="录制和打开过的 trace" onClick={() => setListOpen(!listOpen)}>
+        <button className={`tool${listOpen ? ' on' : ''}`} data-tour="trace-list" title="录制和打开过的 trace" onClick={() => setListOpen(!listOpen)}>
           Trace 列表
         </button>
-        <button className="tool" title="选择本机的 .pftrace / .perfetto-trace / systrace 等文件" onClick={openFile}>
+        <button className="tool" data-tour="trace-open" title="选择本机的 .pftrace / .perfetto-trace / systrace 等文件" onClick={openFile}>
           打开 trace…
         </button>
         <button className="tool" title="关闭 Perfetto，释放它占用的内存" onClick={() => setTraceOpen(false)}>

@@ -45,6 +45,7 @@ export function CollapseButton({ pane }: { pane: Pane }) {
   return (
     <button
       className="collapse-button"
+      data-tour={`collapse-${pane}`}
       title={`收起${PANE_LABEL[pane]}（${paneShortcut(pane)}）`}
       aria-label={`收起${PANE_LABEL[pane]}`}
       onClick={() => useSettingsStore.getState().toggleCollapsed(pane, true)}
