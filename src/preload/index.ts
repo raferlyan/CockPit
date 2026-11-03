@@ -53,6 +53,18 @@ const api: CockpitApi = {
   serial: {
     list: () => ipcRenderer.invoke(IpcChannel.SerialList)
   },
+  trace: {
+    uiUrl: () => ipcRenderer.invoke(IpcChannel.TraceUiUrl),
+    open: (localPath) => ipcRenderer.invoke(IpcChannel.TraceOpen, localPath),
+    pick: () => ipcRenderer.invoke(IpcChannel.TracePick),
+    list: () => ipcRenderer.invoke(IpcChannel.TraceList),
+    remove: (path) => ipcRenderer.invoke(IpcChannel.TraceRemove, path),
+    openDir: () => ipcRenderer.invoke(IpcChannel.TraceOpenDir),
+    record: (serial, options, label) => ipcRenderer.invoke(IpcChannel.TraceRecordStart, serial, options, label),
+    stopRecord: (serial) => ipcRenderer.invoke(IpcChannel.TraceRecordStop, serial),
+    recordings: () => ipcRenderer.invoke(IpcChannel.TraceRecordList),
+    onRecordEvent: (listener) => subscribe(IpcChannel.TraceRecordEvent, listener)
+  },
   terminal: {
     open: (serial, options) => ipcRenderer.invoke(IpcChannel.TerminalOpen, serial, options),
     openSerial: (options, size) => ipcRenderer.invoke(IpcChannel.TerminalOpenSerial, options, size),

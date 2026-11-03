@@ -11,6 +11,9 @@ export interface PaneSizes {
   terminal: number
 }
 
+/** 收起成边缘图标条的区域，参考 Android Studio 的工具窗口 */
+export type CollapsedPanes = Record<keyof PaneSizes, boolean>
+
 export interface Settings {
   /** 整体界面缩放，1 为原始大小 */
   uiScale: number
@@ -21,16 +24,20 @@ export interface Settings {
   /** 终端字号（缩放前的像素） */
   terminalFontSize: number
   panes: PaneSizes
+  collapsed: CollapsedPanes
 }
 
 export const DEFAULT_PANES: PaneSizes = { sidebar: 240, side: 340, terminal: 260 }
+
+export const DEFAULT_COLLAPSED: CollapsedPanes = { sidebar: false, side: false, terminal: false }
 
 export const DEFAULT_SETTINGS: Settings = {
   uiScale: 1,
   uiFont: '',
   monoFont: '',
   terminalFontSize: 12,
-  panes: DEFAULT_PANES
+  panes: DEFAULT_PANES,
+  collapsed: DEFAULT_COLLAPSED
 }
 
 export const SYSTEM_UI_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif"
@@ -48,7 +55,7 @@ const KEY = 'cockpit.settings'
 function load(): Settings {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<Settings>
-    return { ...DEFAULT_SETTINGS, ...saved, panes: { ...DEFAULT_PANES, ...saved.panes } }
+    return { ...DEFAULT_SETTINGS, ...saved, panes: { ...DEFAULT_PANES, ...saved.panes }, collapsed: { ...DEFAULT_COLLAPSED, ...saved.collapsed } }
   } catch {
     return DEFAULT_SETTINGS
   }
@@ -65,6 +72,10 @@ function save(settings: Settings): void {
 interface SettingsState extends Settings {
   update(patch: Partial<Settings>): void
   setPane(name: keyof PaneSizes, size: number): void
+  /** 收起或展开一个区域；不传 collapsed 时切换 */
+  toggleCollapsed(name: keyof PaneSizes, collapsed?: boolean): void
+  /** 有展开的区域就全部收起，否则全部展开（Android Studio 的 Hide All Tool Windows） */
+  toggleAllCollapsed(): void
   resetPanes(): void
   reset(): void
 }
@@ -72,8 +83,8 @@ interface SettingsState extends Settings {
 export const useSettingsStore = create<SettingsState>((set, get) => {
   const commit = (patch: Partial<Settings>) => {
     set(patch)
-    const { uiScale, uiFont, monoFont, terminalFontSize, panes } = get()
-    save({ uiScale, uiFont, monoFont, terminalFontSize, panes })
+    const { uiScale, uiFont, monoFont, terminalFontSize, panes, collapsed } = get()
+    save({ uiScale, uiFont, monoFont, terminalFontSize, panes, collapsed })
   }
   return {
     ...load(),
@@ -82,7 +93,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
       const [min, max] = PANE_LIMITS[name]
       commit({ panes: { ...get().panes, [name]: Math.round(Math.min(Math.max(size, min), max)) } })
     },
-    resetPanes: () => commit({ panes: DEFAULT_PANES }),
+    toggleCollapsed: (name, collapsed) => commit({ collapsed: { ...get().collapsed, [name]: collapsed ?? !get().collapsed[name] } }),
+    toggleAllCollapsed: () => {
+      const anyOpen = Object.values(get().collapsed).some((c) => !c)
+      commit({ collapsed: { sidebar: anyOpen, side: anyOpen, terminal: anyOpen } })
+    },
+    resetPanes: () => commit({ panes: DEFAULT_PANES, collapsed: DEFAULT_COLLAPSED }),
     reset: () => commit(DEFAULT_SETTINGS)
   }
 })

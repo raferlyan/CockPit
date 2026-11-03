@@ -71,6 +71,9 @@ class DevicePoller {
   stop(): void {
     for (const timer of this.timers) clearInterval(timer)
     this.timers.length = 0
+    // 暂停后再恢复时重新取基线，避免把暂停期间平均成一个点
+    this.prevStat = undefined
+    this.prevNet = undefined
   }
 
   snapshot(): MetricsSnapshot {
@@ -165,6 +168,8 @@ class DevicePoller {
  */
 export class MetricsService {
   private readonly pollers = new Map<string, DevicePoller>()
+  /** 录制 trace 时暂停采集的设备，设备列表变化时也不重新启动 */
+  private readonly paused = new Set<string>()
 
   constructor(
     private readonly adb: AdbClient,
@@ -180,7 +185,7 @@ export class MetricsService {
       }
     }
     for (const serial of online) {
-      if (this.pollers.has(serial)) continue
+      if (this.pollers.has(serial) || this.paused.has(serial)) continue
       const poller = new DevicePoller(this.adb, serial, this.emit)
       this.pollers.set(serial, poller)
       poller.start()
@@ -189,6 +194,16 @@ export class MetricsService {
 
   snapshot(serial: string): MetricsSnapshot {
     return this.pollers.get(serial)?.snapshot() ?? { serial, history: [] }
+  }
+
+  /** 暂停时停掉定时采集但保留历史曲线，恢复后接着画 */
+  setPaused(serial: string, paused: boolean): void {
+    if (paused) this.paused.add(serial)
+    else this.paused.delete(serial)
+    const poller = this.pollers.get(serial)
+    if (!poller) return
+    if (paused) poller.stop()
+    else poller.start()
   }
 
   dispose(): void {

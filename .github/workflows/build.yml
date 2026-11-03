@@ -24,6 +24,7 @@ jobs:
 
       # 已存在且校验和一致时跳过下载
       - run: npm run fetch-server
+      - run: npm run fetch-perfetto
 
       - run: npm run typecheck
 

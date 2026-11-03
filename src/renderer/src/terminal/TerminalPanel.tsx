@@ -5,6 +5,7 @@ import { ActionButton } from '../notify/ActionButton'
 import { useTerminalStore, type TerminalTab } from './terminalStore'
 import { TerminalView } from './TerminalView'
 import { SerialDialog } from './SerialDialog'
+import { CollapseButton } from '../settings/ToolStripe'
 
 const LOGCAT_PLACEHOLDER = '可选参数，如 -s ActivityManager 或 --pid=$(pidof -s com.example)'
 
@@ -95,6 +96,7 @@ export function TerminalPanel() {
             </button>
           </>
         )}
+        <CollapseButton pane="terminal" />
       </div>
       <div className="terminal-body">
         {tabs.map((tab) => (

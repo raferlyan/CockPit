@@ -1,6 +1,6 @@
 {
   "name": "cockpit",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Android 设备投屏、终端与状态监控桌面工具",
   "main": "./out/main/index.js",
   "author": "raferlyan",
@@ -15,6 +15,7 @@
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:win": "npm run build && electron-builder --win",
     "fetch-server": "node scripts/fetch-scrcpy-server.mjs",
+    "fetch-perfetto": "node scripts/fetch-perfetto-ui.mjs",
     "postinstall": "node scripts/fix-node-pty.mjs"
   },
   "dependencies": {

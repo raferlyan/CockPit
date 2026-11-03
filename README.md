@@ -31,6 +31,7 @@
 | 记不住 `pm` / `am` / `dumpsys` 的子命令和包名 | 边输入边提示命令、选项、设备上的包名和历史命令 |
 | `adb push` / `adb pull` 手敲路径 | 拖文件进来，选好设备目录就上传；设备上的文件点一下下载 |
 | 串口工具另装一个软件 | 同一个终端区开串口标签 |
+| 抓 trace 要手写 perfetto 配置、`adb pull`、再打开 ui.perfetto.dev | 选个预设点「录制 Trace」，录完直接在内嵌的离线 Perfetto 里打开 |
 
 ## 界面：默认看状态，需要时再投屏
 
@@ -144,6 +145,7 @@ ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ npm install
 | `npm run typecheck` | 类型检查 |
 | `npm test` | 单元测试 |
 | `npm run fetch-server` | 下载并校验 scrcpy-server |
+| `npm run fetch-perfetto` | 下载并校验内嵌的 Perfetto UI（固定版本，约 64 MB） |
 | `npm run package` | 构建未打包的应用目录到 `release/` |
 | `npm run dist:mac` / `npm run dist:win` | 生成安装包 |
 

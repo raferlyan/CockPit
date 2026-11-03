@@ -6,3 +6,5 @@ release/
 *.tsbuildinfo
 # 由 npm run fetch-server 下载并校验
 resources/scrcpy-server
+# 由 npm run fetch-perfetto 下载并校验
+resources/perfetto-ui/

@@ -6,6 +6,7 @@ import type { SerialOptions, SerialPortInfo } from './serial'
 import type { RemoteEntry, TransferProgressEvent, TransferResult } from './files'
 import type { AppAction, AppPackage, InstallResult } from './apps'
 import type { ThemeMode } from './theme'
+import type { TraceFile, TraceRecordEvent, TraceRecordOptions, TraceSource } from './trace'
 
 /** 所有 IPC 通道名集中定义，主进程与 preload 共用 */
 export const IpcChannel = {
@@ -50,6 +51,17 @@ export const IpcChannel = {
   ClipboardWrite: 'clipboard:write',
   ThemeGet: 'theme:get',
   ThemeSet: 'theme:set',
+  TraceUiUrl: 'trace:uiUrl',
+  TraceOpen: 'trace:open',
+  TracePick: 'trace:pick',
+  TraceList: 'trace:list',
+  TraceRemove: 'trace:remove',
+  TraceOpenDir: 'trace:openDir',
+  TraceRecordStart: 'trace:recordStart',
+  TraceRecordStop: 'trace:recordStop',
+  TraceRecordList: 'trace:recordList',
+  /** 主进程 → 渲染进程，录制进度 */
+  TraceRecordEvent: 'trace:recordEvent',
   /** 主进程未捕获的异常，推给界面提示 */
   AppError: 'app:error'
 } as const
@@ -110,6 +122,27 @@ export interface CockpitApi {
   }
   serial: {
     list(): Promise<SerialPortInfo[]>
+  }
+  trace: {
+    /** 内嵌 Perfetto UI 的地址，首次调用时启动本地服务 */
+    uiUrl(): Promise<string>
+    /** 登记本机 trace 文件，返回 Perfetto 可以加载的地址 */
+    open(localPath: string): Promise<TraceSource>
+    /** 系统对话框选择 trace 文件，取消时返回 null */
+    pick(): Promise<string | null>
+    /** trace 目录里的文件，新的在前 */
+    list(): Promise<TraceFile[]>
+    /** 移到废纸篓，只能操作 trace 目录里的文件 */
+    remove(path: string): Promise<void>
+    /** 在 Finder / 资源管理器中打开 trace 目录 */
+    openDir(): Promise<void>
+    /** 开始录制；进度通过 onRecordEvent 推送，label 用作文件名前缀 */
+    record(serial: string, options: TraceRecordOptions, label: string): Promise<void>
+    /** 提前结束录制，已录到的部分照常保存 */
+    stopRecord(serial: string): Promise<void>
+    /** 正在进行的录制 */
+    recordings(): Promise<TraceRecordEvent[]>
+    onRecordEvent(listener: (event: TraceRecordEvent) => void): () => void
   }
   terminal: {
     open(serial: string, options: TerminalOpenOptions): Promise<TerminalSessionInfo>

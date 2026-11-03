@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ThemeSwitch } from '../theme/ThemeSwitch'
 import { useSettingsStore } from './settingsStore'
 import { useUiStore } from './uiStore'
+import { HIDE_ALL_SHORTCUT, paneShortcut } from './ToolStripe'
 
 const UI_FONTS = [
   { value: '', label: '系统默认' },
@@ -134,7 +135,10 @@ export function SettingsDialog() {
         </label>
 
         <h3 className="status-heading">布局</h3>
-        <p className="muted settings-tip">拖动区域之间的边框可以调整大小，双击边框恢复默认。</p>
+        <p className="muted settings-tip">
+          拖动区域之间的边框可以调整大小，双击边框恢复默认。设备列表、设备信息和终端可以点标题栏的箭头收起成边缘的图标条，快捷键 {paneShortcut('sidebar')} /{' '}
+          {paneShortcut('side')} / {paneShortcut('terminal')}，{HIDE_ALL_SHORTCUT} 一键收起或展开全部。
+        </p>
 
         <div className="dialog-actions settings-actions">
           <button

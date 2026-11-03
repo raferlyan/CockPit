@@ -31,6 +31,7 @@
 | Forgetting `pm` / `am` / `dumpsys` subcommands and package names | Suggestions as you type: commands, options, packages installed on the device, and your history |
 | Typing paths for `adb push` / `adb pull` | Drop files in, pick a device folder and upload; download device files with one click |
 | A separate serial tool | Serial tabs in the same terminal area |
+| Hand-written perfetto configs, `adb pull`, then ui.perfetto.dev | Pick a preset, click "Record Trace", and it opens in the embedded offline Perfetto |
 
 ## Layout: status by default, mirroring when you need it
 
@@ -139,6 +140,7 @@ npm run dev
 | `npm run typecheck` | Type checking |
 | `npm test` | Unit tests |
 | `npm run fetch-server` | Download and verify scrcpy-server |
+| `npm run fetch-perfetto` | Download and verify the embedded Perfetto UI (pinned version, ~64 MB) |
 | `npm run package` | Build the unpacked app into `release/` |
 | `npm run dist:mac` / `npm run dist:win` | Build installers |
 

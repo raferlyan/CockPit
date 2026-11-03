@@ -16,9 +16,16 @@ import { useFileStore, usePreventFileNavigation } from './files/fileStore'
 import { connectSettings, useSettingsStore } from './settings/settingsStore'
 import { useUiStore } from './settings/uiStore'
 import { Splitter } from './settings/Splitter'
+import { ToolStripe, useToolWindowShortcuts } from './settings/ToolStripe'
 import { SettingsDialog } from './settings/SettingsDialog'
 import { GuideDialog } from './settings/GuideDialog'
 import { AppManagerDialog } from './apps/AppManagerDialog'
+import { TraceView } from './trace/TraceView'
+import { RecordTraceDialog } from './trace/RecordTraceDialog'
+import { connectTraces, useTraceStore } from './trace/traceStore'
+
+/** 收起后图标条的宽（左右）或高（底部），像素 */
+const STRIPE_SIZE = 28
 
 /** Cmd/Ctrl + = / - / 0 调整整体字号 */
 function useZoomShortcuts(): void {
@@ -44,52 +51,87 @@ export function App() {
   useEffect(() => connectMetrics(), [])
   useEffect(() => connectTheme(), [])
   useEffect(() => connectSettings(), [])
+  useEffect(() => connectTraces(), [])
   usePreventFileNavigation()
   useZoomShortcuts()
+  useToolWindowShortcuts()
   const panes = useSettingsStore((s) => s.panes)
-  const { settingsOpen, guideOpen, appsSerial } = useUiStore()
+  const collapsed = useSettingsStore((s) => s.collapsed)
+  const { settingsOpen, guideOpen, appsSerial, traceOpen } = useUiStore()
   // 默认中间显示设备状态；有投屏窗格时投屏占中间，状态挪到右侧
   const mirroring = useAppStore((s) => s.mirrorTiles.length > 0)
+  // Perfetto 打开时占中间；投屏窗格只是隐藏，会话不断，收起后原样回来
+  const statusAside = mirroring || traceOpen
   const transfer = useFileStore((s) => s.transfer !== null)
+  const traceDialogSerial = useTraceStore((s) => s.dialogSerial)
+
+  // 收起的区域只占一条图标条；尺寸变量换成图标条的宽 / 高，网格和拖动条位置都跟着变
+  const size = (pane: keyof typeof panes, stripe: number) => `${collapsed[pane] ? stripe : panes[pane]}px`
 
   return (
     <div
       className="app"
-      style={{ ['--sidebar-w' as string]: `${panes.sidebar}px`, ['--side-w' as string]: `${panes.side}px`, ['--term-h' as string]: `${panes.terminal}px` }}
+      style={{
+        ['--sidebar-w' as string]: size('sidebar', STRIPE_SIZE),
+        ['--side-w' as string]: size('side', STRIPE_SIZE),
+        ['--term-h' as string]: size('terminal', STRIPE_SIZE)
+      }}
     >
-      <ErrorBoundary name="设备列表" className="sidebar">
-        <DeviceList />
-      </ErrorBoundary>
-      <main className="workspace">
-        {mirroring ? (
-          <ErrorBoundary name="投屏区" className="mirror-area">
-            <MirrorGrid />
-          </ErrorBoundary>
-        ) : (
-          <ErrorBoundary name="设备状态" className="panel center-status">
-            <StatusPanel wide />
+      {collapsed.sidebar ? (
+        <ToolStripe pane="sidebar" />
+      ) : (
+        <ErrorBoundary name="设备列表" className="sidebar">
+          <DeviceList />
+        </ErrorBoundary>
+      )}
+      <main className={`workspace${collapsed.terminal ? ' terminal-collapsed' : ''}`}>
+        {traceOpen && (
+          <ErrorBoundary name="Perfetto" className="trace-area">
+            <TraceView />
           </ErrorBoundary>
         )}
-        <aside className="side-panels">
-          <ErrorBoundary name="设备信息" className="panel">
-            <DeviceDetail />
-          </ErrorBoundary>
-          {mirroring && (
-            <ErrorBoundary name="设备状态" className="panel">
-              <StatusPanel />
+        {mirroring ? (
+          <div className={traceOpen ? 'is-hidden' : 'contents'}>
+            <ErrorBoundary name="投屏区" className="mirror-area">
+              <MirrorGrid />
             </ErrorBoundary>
-          )}
-        </aside>
+          </div>
+        ) : (
+          !traceOpen && (
+            <ErrorBoundary name="设备状态" className="panel center-status">
+              <StatusPanel wide />
+            </ErrorBoundary>
+          )
+        )}
+        {collapsed.side ? (
+          <ToolStripe pane="side" />
+        ) : (
+          <aside className="side-panels">
+            <ErrorBoundary name="设备信息" className="panel">
+              <DeviceDetail />
+            </ErrorBoundary>
+            {statusAside && (
+              <ErrorBoundary name="设备状态" className="panel">
+                <StatusPanel />
+              </ErrorBoundary>
+            )}
+          </aside>
+        )}
+        {/* 终端收起时只隐藏不卸载，保留各标签的会话和滚动记录 */}
         <ErrorBoundary name="终端" className="terminal-area">
           <TerminalPanel />
         </ErrorBoundary>
-        <Splitter pane="side" orientation="vertical" direction={-1} className="splitter-side" maxRatio={0.6} />
-        <Splitter pane="terminal" orientation="horizontal" direction={-1} className="splitter-terminal" maxRatio={0.75} />
+        {collapsed.terminal && <ToolStripe pane="terminal" />}
+        {!collapsed.side && <Splitter pane="side" orientation="vertical" direction={-1} className="splitter-side" maxRatio={0.6} />}
+        {!collapsed.terminal && (
+          <Splitter pane="terminal" orientation="horizontal" direction={-1} className="splitter-terminal" maxRatio={0.75} />
+        )}
       </main>
-      <Splitter pane="sidebar" orientation="vertical" direction={1} className="splitter-sidebar" maxRatio={0.35} />
+      {!collapsed.sidebar && <Splitter pane="sidebar" orientation="vertical" direction={1} className="splitter-sidebar" maxRatio={0.35} />}
       <AdbStatusBar />
       {transfer && <FileTransferDialog />}
       {appsSerial && <AppManagerDialog serial={appsSerial} />}
+      {traceDialogSerial && <RecordTraceDialog serial={traceDialogSerial} />}
       {settingsOpen && <SettingsDialog />}
       {guideOpen && <GuideDialog />}
       <Toaster />

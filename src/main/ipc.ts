@@ -15,6 +15,10 @@ import type { AppService } from './apps/AppService'
 import type { AppAction, AppPackage } from '@shared/apps'
 import type { ThemeMode } from '@shared/theme'
 import { loadTheme, setTheme } from './theme'
+import type { PerfettoUiServer } from './trace/PerfettoUiServer'
+import type { TraceLibrary } from './trace/TraceLibrary'
+import type { TraceRecorder } from './trace/TraceRecorder'
+import type { TraceRecordOptions } from '@shared/trace'
 
 export function broadcast(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -35,9 +39,13 @@ export function registerIpc(ctx: {
   apps?: AppService
   /** 串口不依赖 adb，总是可用 */
   serial: SerialService
+  /** 内嵌 Perfetto UI，不依赖 adb */
+  perfetto: PerfettoUiServer
+  traces: TraceLibrary
+  recorder?: TraceRecorder
   fallbackStatus: AdbStatus
 }): void {
-  const { adb, deviceManager, mirror, shell, metrics, files, apps, serial } = ctx
+  const { adb, deviceManager, mirror, shell, metrics, files, apps, serial, perfetto, traces, recorder } = ctx
   const requireFiles = () => {
     if (!files) throw new Error('未找到 adb')
     return files
@@ -128,6 +136,33 @@ export function registerIpc(ctx: {
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
   ipcMain.on(IpcChannel.FilesReveal, (_e, path: string) => electronShell.showItemInFolder(path))
+  ipcMain.handle(IpcChannel.TraceUiUrl, () => perfetto.uiUrl())
+  ipcMain.handle(IpcChannel.TraceOpen, (_e, localPath: string) => perfetto.register(String(localPath)))
+  ipcMain.handle(IpcChannel.TracePick, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const options = {
+      title: '打开 trace 文件',
+      properties: ['openFile'] as Array<'openFile'>,
+      filters: [
+        { name: 'Trace', extensions: ['pftrace', 'perfetto-trace', 'trace', 'pb', 'json', 'gz', 'zip', 'ctrace', 'html'] },
+        { name: '所有文件', extensions: ['*'] }
+      ]
+    }
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  })
+  ipcMain.handle(IpcChannel.TraceList, () => traces.list())
+  ipcMain.handle(IpcChannel.TraceRemove, (_e, path: string) => traces.remove(String(path)))
+  ipcMain.handle(IpcChannel.TraceOpenDir, async () => {
+    const error = await electronShell.openPath(await traces.ensureDir())
+    if (error) throw new Error(error)
+  })
+  ipcMain.handle(IpcChannel.TraceRecordStart, (_e, serial: string, options: TraceRecordOptions, label: string) => {
+    if (!recorder) throw new Error('未找到 adb')
+    return recorder.start(serial, options, String(label))
+  })
+  ipcMain.handle(IpcChannel.TraceRecordStop, (_e, serial: string) => recorder?.stop(serial))
+  ipcMain.handle(IpcChannel.TraceRecordList, () => recorder?.list() ?? [])
   ipcMain.handle(IpcChannel.ThemeGet, () => loadTheme())
   ipcMain.handle(IpcChannel.ThemeSet, (_e, mode: ThemeMode) => setTheme(mode))
   ipcMain.handle(IpcChannel.ClipboardRead, () => clipboard.readText())
@@ -139,6 +174,7 @@ export function registerIpc(ctx: {
     mirror?.onDevicesChanged(devices)
     shell?.onDevicesChanged(devices)
     metrics?.onDevicesChanged(devices)
+    recorder?.onDevicesChanged(devices)
     broadcast(IpcChannel.DevicesChanged, devices)
   })
   deviceManager?.on('status', (status) => broadcast(IpcChannel.AdbStatusChanged, status))

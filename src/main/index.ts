@@ -13,6 +13,9 @@ import { FileService } from './files/FileService'
 import { AppService } from './apps/AppService'
 import { IpcChannel } from '@shared/ipc'
 import { applyTheme, loadTheme, windowBackground } from './theme'
+import { PerfettoUiServer } from './trace/PerfettoUiServer'
+import { TraceLibrary } from './trace/TraceLibrary'
+import { TraceRecorder } from './trace/TraceRecorder'
 
 let deviceManager: DeviceManager | undefined
 let mirror: MirrorService | undefined
@@ -21,6 +24,8 @@ let metrics: MetricsService | undefined
 let files: FileService | undefined
 let apps: AppService | undefined
 const serial = new SerialService()
+let perfetto: PerfettoUiServer | undefined
+let recorder: TraceRecorder | undefined
 
 /** 开发时为项目根目录下的 resources/，打包后为 extraResources 目录 */
 function resourcesDir(): string {
@@ -81,8 +86,21 @@ async function bootstrap(): Promise<void> {
     files = new FileService(adb)
     apps = new AppService(adb)
   }
+  const traces = new TraceLibrary(join(app.getPath('documents'), 'Cockpit', 'Traces'), (path) => shell.trashItem(path))
+  if (adb && deviceManager && metrics) {
+    const devices = deviceManager
+    const poller = metrics
+    recorder = new TraceRecorder(
+      adb,
+      traces,
+      (serial) => devices.list().find((d) => d.serial === serial),
+      (serial, paused) => poller.setPaused(serial, paused),
+      (event) => broadcast(IpcChannel.TraceRecordEvent, event)
+    )
+  }
 
-  registerIpc({ adb, deviceManager, mirror, shell: shellService, metrics, files, apps, serial, fallbackStatus })
+  perfetto = new PerfettoUiServer(join(resourcesDir(), 'perfetto-ui'))
+  registerIpc({ adb, deviceManager, mirror, shell: shellService, metrics, files, apps, serial, perfetto, traces, recorder, fallbackStatus })
   createWindow()
   void deviceManager?.start()
 }
@@ -115,5 +133,7 @@ app.on('before-quit', () => {
   shellService?.dispose()
   metrics?.dispose()
   serial.dispose()
+  perfetto?.dispose()
+  recorder?.dispose()
   deviceManager?.dispose()
 })

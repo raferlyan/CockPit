@@ -6,6 +6,7 @@ import { errorMessage, notify } from '../notify/notifyStore'
 import { useAppStore } from '../store'
 import { deviceTitle, STATE_LABEL } from '../labels'
 import { RootBadge } from './RootBadge'
+import { CollapseButton } from '../settings/ToolStripe'
 
 export function DeviceList() {
   const devices = useAppStore((s) => s.devices)
@@ -16,7 +17,10 @@ export function DeviceList() {
     <aside className="sidebar">
       <header className="sidebar-header">
         <span>设备</span>
-        <span className="count">{devices.length}</span>
+        <span className="sidebar-header-end">
+          <span className="count">{devices.length}</span>
+          <CollapseButton pane="sidebar" />
+        </span>
       </header>
 
       <ul className="device-list">

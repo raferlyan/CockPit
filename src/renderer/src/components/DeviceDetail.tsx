@@ -7,16 +7,23 @@ import { ActionButton } from '../notify/ActionButton'
 import { droppedPaths, handleDeviceDrop, hasDraggedFiles, useFileStore } from '../files/fileStore'
 import { useUiStore } from '../settings/uiStore'
 import { takeScreenshot } from '../apps/screenshot'
+import { isRecordingActive, useTraceStore } from '../trace/traceStore'
+import { CollapseButton } from '../settings/ToolStripe'
 
 export function DeviceDetail() {
   const device = useAppStore((s) => s.devices.find((d) => d.serial === s.focusedSerial))
   const mirrored = useAppStore((s) => (device ? s.mirrorTiles.includes(device.serial) : false))
   const [dropping, setDropping] = useState(false)
+  const recording = useTraceStore((s) => (device ? s.recordings[device.serial] : undefined))
+  const tracing = isRecordingActive(recording)
 
   if (!device) {
     return (
       <section className="panel">
-        <h2 className="panel-title">设备信息</h2>
+        <div className="panel-title-row">
+          <h2 className="panel-title">设备信息</h2>
+          <CollapseButton pane="side" />
+        </div>
         <p className="empty">未选择设备</p>
       </section>
     )
@@ -57,7 +64,10 @@ export function DeviceDetail() {
       {dropping && <div className="panel-drop-hint">松开鼠标：APK 直接安装，其它文件上传</div>}
       <div className="panel-title-row">
         <h2 className="panel-title">{deviceTitle(device)}</h2>
-        {device.state === 'device' && <RootBadge state={device.root} />}
+        <span className="panel-title-end">
+          {device.state === 'device' && <RootBadge state={device.root} />}
+          <CollapseButton pane="side" />
+        </span>
       </div>
       {hint && <p className="hint">{hint}</p>}
       <dl className="kv">
@@ -92,6 +102,14 @@ export function DeviceDetail() {
         </ActionButton>
         <ActionButton className="secondary" disabledReason={offlineReason} onClick={() => void takeScreenshot(device)}>
           截图
+        </ActionButton>
+        <ActionButton
+          className={tracing ? 'primary' : 'secondary'}
+          disabledReason={!tracing && offlineReason}
+          title="用设备自带的 perfetto 录制系统 trace，录完在内嵌的 Perfetto 中打开"
+          onClick={() => useTraceStore.getState().openDialog(device.serial)}
+        >
+          {tracing ? '录制中…' : '录制 Trace'}
         </ActionButton>
         {device.connection === 'tcp' && (
           <button className="secondary" onClick={() => void api.adb.disconnect(device.serial)}>
