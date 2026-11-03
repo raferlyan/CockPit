@@ -31,7 +31,7 @@ export class FileService {
       return parseLsOutput(await this.adb.shell(serial, command, { timeout: 15_000 }))
     } catch (error) {
       if (!isPermissionError((error as Error).message)) throw error
-      const out = await this.asRoot(serial, command, error as Error)
+      const out = await this.asRoot(serial, command, new Error(`${dir}: Permission denied`))
       return parseLsOutput(out)
     }
   }
@@ -67,8 +67,8 @@ export class FileService {
       } catch (error) {
         results.push({ source: local, target, ok: false, message: (error as Error).message })
       }
-      done += sizes[index]
       report(sizes[index])
+      done += sizes[index]
     }
     return results
   }

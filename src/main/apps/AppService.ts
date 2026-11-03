@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { app, clipboard, ClipboardItem } from 'electron'
 import type { AppAction, AppPackage, InstallResult } from '@shared/apps'
-import type { AdbClient } from '../adb/AdbClient'
+import type { AdbClient, AdbError } from '../adb/AdbClient'
 import { parsePackageList } from './packages'
 
 const SEP = '__COCKPIT_SEP__'
@@ -37,9 +37,12 @@ export class AppService {
       forceStop: `am force-stop ${pkg}`,
       clearData: `pm clear ${pkg}`
     }
-    const out = (await this.adb.shell(serial, `${command[action]} 2>&1`, { timeout: 60_000 })).trim()
-    // pm 失败时多数仍返回 0，靠输出判断
-    if (/Failure|Error|Exception|not installed|Unknown package/i.test(out)) throw new Error(out)
+    // pm 有时返回非 0 有时返回 0，统一吞掉退出码、靠输出判断，这样失败时能把 pm 的原话带给用户
+    const out = (await this.adb.shell(serial, `${command[action]} 2>&1; exit 0`, { timeout: 60_000 })).trim()
+    if (/Failure|Error|Exception|not installed|Unknown package/i.test(out)) {
+      // 抛异常时 pm 会打出整段 Java 调用栈，只留「XxxException: 原因」那一行
+      throw new Error(out.match(/^[\w.$]*Exception: .*$/m)?.[0] ?? out.split(/\r?\n/)[0])
+    }
     return out
   }
 
@@ -60,7 +63,8 @@ export class AppService {
         const failure = out.match(/Failure \[[^\]]+\]/)
         results.push(failure ? { path, ok: false, message: failure[0] } : { path, ok: true, message: basename(path) })
       } catch (error) {
-        const message = (error as Error).message
+        // 只保留 adb 自己的报错，不带冗长的命令行
+        const message = (error as AdbError).stderr?.trim() || (error as Error).message
         results.push({ path, ok: false, message: message.match(/Failure \[[^\]]+\]/)?.[0] ?? message })
       }
     }
@@ -73,7 +77,9 @@ export class AppService {
     if (png.length < 8 || png.readUInt32BE(0) !== 0x89504e47) throw new Error('设备没有返回 PNG 图像（可能处于锁屏安全界面或不支持 screencap）')
     const dir = join(app.getPath('pictures'), 'Cockpit')
     await mkdir(dir, { recursive: true })
-    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '_').slice(0, 15)
+    const d = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
     const file = join(dir, `${label.replace(/[^\w.-]+/g, '_')}_${stamp}.png`)
     await writeFile(file, png)
     // 复制失败不影响截图本身

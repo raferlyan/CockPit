@@ -15,7 +15,8 @@ export function loadCommand(withBattery: boolean): string {
     'for z in /sys/class/thermal/thermal_zone*; do echo "$(cat $z/type 2>/dev/null) $(cat $z/temp 2>/dev/null)"; done',
     'cat /proc/net/dev',
     'cat /proc/loadavg',
-    'for i in /sys/class/net/*; do echo "${i##*/} $(cat $i/operstate 2>/dev/null)"; done',
+    // /sys/class/net/*/operstate 在 Android 12+ 上 shell 读不到（SELinux），改看哪些接口拿到了全局地址
+    'ip -o addr show 2>/dev/null',
     withBattery ? 'dumpsys battery' : 'true'
   ]
   return parts.join(`; echo ${SEP}; `) + '; exit 0'
@@ -131,12 +132,15 @@ export function parseNetDev(text: string): NetCounters | undefined {
   return counters.size ? counters : undefined
 }
 
-/** `/sys/class/net/<if>/operstate`：up / down / unknown / dormant…，返回处于 up 的接口 */
-export function parseOperstate(text: string): Set<string> {
+/**
+ * 从 `ip -o addr show` 找出已联网的接口：拿到 scope global 地址（IPv4 或 IPv6）的视为在线。
+ * 行形如 `30: wlan0    inet 192.168.10.200/24 brd … scope global wlan0\ …`。
+ */
+export function parseConnectedIfaces(text: string): Set<string> {
   const up = new Set<string>()
   for (const line of text.split(/\r?\n/)) {
-    const [name, state] = line.trim().split(/\s+/)
-    if (name && state === 'up') up.add(name)
+    const match = line.match(/^\d+:\s+([^\s@:]+)\s+inet6?\s.*\bscope global\b/)
+    if (match) up.add(match[1])
   }
   return up
 }

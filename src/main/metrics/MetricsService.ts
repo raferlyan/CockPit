@@ -10,7 +10,7 @@ import {
   parseLoadavg,
   parseMeminfo,
   parseNetDev,
-  parseOperstate,
+  parseConnectedIfaces,
   parseProcStat,
   parseThermal,
   parseTop,
@@ -81,7 +81,7 @@ class DevicePoller {
     const withBattery = this.tick++ % BATTERY_EVERY === 0
     const out = await this.adb.shell(this.serial, loadCommand(withBattery), { timeout: COMMAND_TIMEOUT })
     const t = Date.now()
-    const [statText = '', memText = '', freqText = '', thermalText = '', netText = '', loadText = '', operText = '', batteryText = ''] = out.split(SEP)
+    const [statText = '', memText = '', freqText = '', thermalText = '', netText = '', loadText = '', addrText = '', batteryText = ''] = out.split(SEP)
 
     const stat = parseProcStat(statText)
     const prev = this.prevStat
@@ -111,7 +111,7 @@ class DevicePoller {
     }
     if (net && prevNet && t > prevNet.t) {
       const seconds = (t - prevNet.t) / 1000
-      const up = parseOperstate(operText)
+      const up = parseConnectedIfaces(addrText)
       const ifaces = [...net].map(([name, now]) => {
         const before = prevNet.counters.get(name)
         // 新出现的接口没有基线；接口重置时计数器会变小，速率记为 0

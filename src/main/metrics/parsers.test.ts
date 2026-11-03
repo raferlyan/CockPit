@@ -8,7 +8,7 @@ import {
   parseLoadavg,
   parseMeminfo,
   parseNetDev,
-  parseOperstate,
+  parseConnectedIfaces,
   parseProcStat,
   parseThermal,
   parseTop,
@@ -106,8 +106,14 @@ rmnet_data0:     500       5    0    0    0     0          0         0      100 
     expect(parseNetDev('')).toBeUndefined()
   })
 
-  it('reads operstate lines', () => {
-    expect(parseOperstate('wlan0 up\nrmnet_data0 down\ndummy0 unknown\n')).toEqual(new Set(['wlan0']))
+  it('treats interfaces with a global address as connected', () => {
+    const text = [
+      '1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever preferred_lft forever',
+      '10: rmnet_data0    inet6 fe80::e7c3:33b7:f4d6:955b/64 scope link \\       valid_lft forever preferred_lft forever',
+      '30: wlan0    inet 192.168.10.200/24 brd 192.168.10.255 scope global wlan0\\       valid_lft forever preferred_lft forever',
+      '31: rmnet_data2    inet6 2409:8a28::1/64 scope global dynamic \\       valid_lft 86327sec preferred_lft 29955sec'
+    ].join('\n')
+    expect(parseConnectedIfaces(text)).toEqual(new Set(['wlan0', 'rmnet_data2']))
   })
 })
 
