@@ -49,4 +49,6 @@ jobs:
           files: ${{ matrix.files }}
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
-          generate_release_notes: true
+          # 更新说明来自 docs/release-notes/<标签>.md，不用自动生成的 compare 链接
+          body_path: docs/release-notes/${{ github.ref_name }}.md
+          generate_release_notes: false
