@@ -52,6 +52,14 @@ export class DeviceManager extends EventEmitter<DeviceManagerEvents> {
     this.stopTracking?.()
   }
 
+  /** 终端身份变化时调用：该设备有任一终端处于 root 身份就标记 shellRoot */
+  setShellRoot(serial: string, shellRoot: boolean): void {
+    const device = this.devices.get(serial)
+    if (!device || Boolean(device.shellRoot) === shellRoot) return
+    this.devices.set(serial, { ...device, shellRoot })
+    this.emitDevices()
+  }
+
   async refreshInfo(serial: string): Promise<void> {
     const device = this.devices.get(serial)
     if (device?.state === 'device') await this.loadInfo(serial)
@@ -100,6 +108,7 @@ export class DeviceManager extends EventEmitter<DeviceManagerEvents> {
         ...item,
         info: keepInfo ? previous?.info : undefined,
         root: keepInfo ? (previous?.root ?? 'unknown') : 'unknown',
+        shellRoot: keepInfo ? previous?.shellRoot : undefined,
         infoError: keepInfo ? previous?.infoError : undefined
       })
       if (becameReady) void this.loadInfo(item.serial)

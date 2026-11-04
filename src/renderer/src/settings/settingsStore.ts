@@ -1,5 +1,8 @@
 import { create } from 'zustand'
 import { api } from '../api'
+import { setLanguage, type Language } from '../i18n'
+
+export type { Language }
 
 /** 可拖动边框调整的区域尺寸（像素） */
 export interface PaneSizes {
@@ -21,11 +24,18 @@ export interface Settings {
   uiFont: string
   /** 等宽字体，用于终端、路径、数值 */
   monoFont: string
+  /** 终端（Shell、logcat、串口）字体，空字符串为跟随等宽字体 */
+  terminalFont: string
   /** 终端字号（缩放前的像素） */
   terminalFontSize: number
+  /** 界面语言 */
+  language: Language
   panes: PaneSizes
   collapsed: CollapsedPanes
 }
+
+/** Windows Terminal Preview 的默认字体，随应用打包，macOS 上同样可用 */
+export const DEFAULT_TERMINAL_FONT = 'Cascadia Mono'
 
 export const DEFAULT_PANES: PaneSizes = { sidebar: 240, side: 340, terminal: 260 }
 
@@ -35,9 +45,16 @@ export const DEFAULT_SETTINGS: Settings = {
   uiScale: 1,
   uiFont: '',
   monoFont: '',
+  terminalFont: DEFAULT_TERMINAL_FONT,
   terminalFontSize: 12,
+  language: defaultLanguage(),
   panes: DEFAULT_PANES,
   collapsed: DEFAULT_COLLAPSED
+}
+
+/** 首次启动按系统语言选择，中文系统用中文，其余用英文 */
+function defaultLanguage(): Language {
+  return /^zh/i.test(navigator.language) ? 'zh' : 'en'
 }
 
 export const SYSTEM_UI_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif"
@@ -83,8 +100,9 @@ interface SettingsState extends Settings {
 export const useSettingsStore = create<SettingsState>((set, get) => {
   const commit = (patch: Partial<Settings>) => {
     set(patch)
-    const { uiScale, uiFont, monoFont, terminalFontSize, panes, collapsed } = get()
-    save({ uiScale, uiFont, monoFont, terminalFontSize, panes, collapsed })
+    if (patch.language) setLanguage(patch.language)
+    const { uiScale, uiFont, monoFont, terminalFont, terminalFontSize, language, panes, collapsed } = get()
+    save({ uiScale, uiFont, monoFont, terminalFont, terminalFontSize, language, panes, collapsed })
   }
   return {
     ...load(),
@@ -99,9 +117,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
       commit({ collapsed: { sidebar: anyOpen, side: anyOpen, terminal: anyOpen } })
     },
     resetPanes: () => commit({ panes: DEFAULT_PANES, collapsed: DEFAULT_COLLAPSED }),
-    reset: () => commit(DEFAULT_SETTINGS)
+    // 恢复默认不改语言，免得用户看不懂界面
+    reset: () => commit({ ...DEFAULT_SETTINGS, language: get().language })
   }
 })
+
+setLanguage(useSettingsStore.getState().language)
 
 /** 把缩放和字体应用到页面；启动时调用一次，返回取消函数 */
 export function connectSettings(): () => void {
@@ -120,6 +141,11 @@ export function connectSettings(): () => void {
 /** 等宽字体栈，终端和 --mono 共用；用户的字体装不上时退回系统等宽字体 */
 export function monoFontStack(monoFont: string): string {
   return monoFont ? `${quoteFont(monoFont)}, ${SYSTEM_MONO_FONT}` : SYSTEM_MONO_FONT
+}
+
+/** 终端字体栈：终端字体 → 等宽字体 → 系统等宽字体 */
+export function terminalFontStack(terminalFont: string, monoFont: string): string {
+  return terminalFont ? `${quoteFont(terminalFont)}, ${monoFontStack(monoFont)}` : monoFontStack(monoFont)
 }
 
 /** 用户输入的字体名可能带空格，加引号；已经是字体栈（含逗号或引号）的原样使用 */

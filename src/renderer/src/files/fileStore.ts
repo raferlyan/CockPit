@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { create } from 'zustand'
 import { api } from '../api'
 import { errorMessage, notify, updateToast } from '../notify/notifyStore'
+import { t } from '../i18n'
 
 interface Transfer {
   serial: string
@@ -65,14 +66,18 @@ const isApk = (path: string) => /\.apk$/i.test(path)
 /** 安装 APK，进度和结果用同一条提示原地更新 */
 export async function installApks(serial: string, paths: string[]): Promise<void> {
   const names = paths.map((p) => p.split(/[\\/]/).pop()).join('、')
-  const toast = notify('info', `正在安装 ${paths.length > 1 ? `${paths.length} 个应用` : names}…`, '大的应用可能需要几十秒，部分设备会在手机上弹出确认')
+  const toast = notify(
+    'info',
+    t('正在安装 {names}…', { names: paths.length > 1 ? t('{n} 个应用', { n: paths.length }) : names }),
+    t('大的应用可能需要几十秒，部分设备会在手机上弹出确认')
+  )
   try {
     const results = await api.apps.install(serial, paths)
     const failed = results.filter((r) => !r.ok)
-    if (!failed.length) updateToast(toast, 'success', `已安装 ${names}`)
-    else updateToast(toast, 'error', `${failed.length} 个应用安装失败`, failed.map((r) => `${r.path.split(/[\\/]/).pop()}：${r.message}`).join('\n'))
+    if (!failed.length) updateToast(toast, 'success', t('已安装 {names}', { names }))
+    else updateToast(toast, 'error', t('{n} 个应用安装失败', { n: failed.length }), failed.map((r) => `${r.path.split(/[\\/]/).pop()}：${r.message}`).join('\n'))
   } catch (error) {
-    updateToast(toast, 'error', '安装失败', errorMessage(error))
+    updateToast(toast, 'error', t('安装失败'), errorMessage(error))
   }
 }
 

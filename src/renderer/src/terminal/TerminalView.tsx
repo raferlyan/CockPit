@@ -2,14 +2,18 @@ import { useEffect, useRef, useState } from 'react'
 import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
+import '@fontsource/cascadia-mono/400.css'
+import '@fontsource/cascadia-mono/700.css'
 import { api } from '../api'
 import { droppedPaths, hasDraggedFiles } from '../files/fileStore'
 import { listenTerminal, type TerminalTab } from './terminalStore'
+import { compileFilter, DEFAULT_FILTER, logcatBuffer, renderLine, type CompiledFilter } from './logcat'
+import { t } from '../i18n'
 import { suggest, type Suggestion } from './completion'
 import { getHistory, getPackages, recordHistory } from './completionSources'
 import { readInputLine } from './inputLine'
 import { useThemeStore, type ResolvedTheme } from '../theme/themeStore'
-import { monoFontStack, useSettingsStore } from '../settings/settingsStore'
+import { terminalFontStack, useSettingsStore } from '../settings/settingsStore'
 
 const isMac = api.platform === 'darwin'
 
@@ -41,7 +45,7 @@ const THEMES: Record<ResolvedTheme, ITheme> = {
 /** 用户敲键后这么久内收到的回显才触发提示，避免命令输出刷屏时弹出提示框 */
 const TYPING_WINDOW = 800
 
-const KIND_LABEL: Record<Suggestion['kind'], string> = { history: '历史', command: '命令', option: '选项', package: '包名', value: '参数' }
+const KIND_LABEL = (): Record<Suggestion['kind'], string> => ({ history: t('历史'), command: t('命令'), option: t('选项'), package: t('包名'), value: t('参数') })
 
 interface Popup {
   items: Suggestion[]
@@ -66,6 +70,8 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
   const wrapRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<{ term: Terminal; fit: () => void } | null>(null)
+  /** logcat 当前的筛选与暂停状态，数据回调里读取 */
+  const viewRef = useRef<{ filter: CompiledFilter; paused: boolean }>({ filter: compileFilter(DEFAULT_FILTER), paused: false })
   const [popup, setPopup] = useState<Popup | null>(null)
   const popupRef = useRef<Popup | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; hasSelection: boolean } | null>(null)
@@ -73,6 +79,7 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
   const interactive = tab.kind !== 'logcat'
   const resolvedTheme = useThemeStore((s) => s.resolved)
   const monoFont = useSettingsStore((s) => s.monoFont)
+  const terminalFont = useSettingsStore((s) => s.terminalFont)
   const fontSize = useSettingsStore((s) => s.terminalFontSize)
 
   const showPopup = (next: Popup | null) => {
@@ -101,7 +108,7 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
   useEffect(() => {
     const host = hostRef.current!
     const term = new Terminal({
-      fontFamily: monoFontStack(useSettingsStore.getState().monoFont),
+      fontFamily: terminalFontStack(useSettingsStore.getState().terminalFont, useSettingsStore.getState().monoFont),
       fontSize: useSettingsStore.getState().terminalFontSize,
       theme: THEMES[useThemeStore.getState().resolved],
       cursorBlink: tab.kind === 'shell',
@@ -159,17 +166,19 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
     term.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown') return true
       const shortcut = isMac ? event.metaKey : event.ctrlKey && event.shiftKey
+      const plainCtrl = event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey
 
-      // 复制：macOS Cmd+C；Windows Ctrl+Shift+C，或有选中内容时的 Ctrl+C（没有选中时仍是中断）
-      if (event.code === 'KeyC' && (shortcut || (!isMac && event.ctrlKey && !event.shiftKey && term.hasSelection()))) {
+      // 复制：macOS Cmd+C；Windows Ctrl+Shift+C；两个平台有选中内容时的 Ctrl+C 也是复制（没有选中时仍是中断）
+      if (event.code === 'KeyC' && (shortcut || (plainCtrl && term.hasSelection()))) {
         if (copySelection()) {
-          if (!isMac && !event.shiftKey) term.clearSelection()
+          if (plainCtrl) term.clearSelection()
           event.preventDefault()
           return false
         }
         return !shortcut
       }
-      if (event.code === 'KeyV' && shortcut) {
+      // 粘贴：Cmd+V / Ctrl+Shift+V，以及 Ctrl+V（shell 里几乎用不到 Ctrl+V 的字面输入）
+      if (event.code === 'KeyV' && (shortcut || plainCtrl)) {
         paste()
         event.preventDefault()
         return false
@@ -205,7 +214,16 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
       }
     })
 
-    const offData = listenTerminal(tab.id, (data) => term.write(data, scheduleUpdate))
+    const logcat = tab.kind === 'logcat' ? logcatBuffer(tab.id) : null
+    const offData = listenTerminal(tab.id, (data) => {
+      if (!logcat) return term.write(data, scheduleUpdate)
+      // logcat 按行缓存，只把符合筛选的行写进终端；暂停时只缓存
+      const added = logcat.push(data)
+      const { filter, paused } = viewRef.current
+      if (paused || !added.length) return
+      const shown = filter.active ? added.filter(filter.match) : added
+      if (shown.length) term.write(shown.map((line) => renderLine(line, filter.highlight)).join('\r\n') + '\r\n')
+    })
     const input = term.onData((data) => {
       if (data === '\r') {
         const line = readInputLine(term)
@@ -249,20 +267,43 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
     if (term) term.options.theme = THEMES[resolvedTheme]
   }, [resolvedTheme])
 
+  // 筛选条件变化或取消暂停时，从缓存里重放符合条件的最近若干行
+  useEffect(() => {
+    if (tab.kind !== 'logcat') return
+    const filter = compileFilter(tab.logcatFilter ?? DEFAULT_FILTER)
+    const paused = Boolean(tab.paused)
+    viewRef.current = { filter, paused }
+    const term = termRef.current?.term
+    if (!term || paused) return
+    const lines = logcatBuffer(tab.id).lines
+    const shown = (filter.active ? lines.filter(filter.match) : lines).slice(-term.options.scrollback!)
+    term.reset()
+    if (shown.length) term.write(shown.map((line) => renderLine(line, filter.highlight)).join('\r\n') + '\r\n')
+    else if (filter.active) term.write(`\x1b[90m${t('[没有符合筛选条件的日志]')}\x1b[0m\r\n`)
+  }, [tab.id, tab.kind, tab.logcatFilter, tab.paused])
+
   // 字体或字号变了，行列数随之变化，需要重新 fit 并通知设备端
   useEffect(() => {
     const current = termRef.current
     if (!current) return
-    current.term.options.fontFamily = monoFontStack(monoFont)
+    const family = terminalFontStack(terminalFont, monoFont)
+    current.term.options.fontFamily = family
     current.term.options.fontSize = fontSize
     current.fit()
-  }, [monoFont, fontSize])
+    // 字体文件按需加载，加载完字宽才准，再 fit 一次
+    void document.fonts.load(`${fontSize}px ${family}`).then(() => {
+      if (termRef.current !== current) return
+      current.term.options.fontFamily = ''
+      current.term.options.fontFamily = family
+      current.fit()
+    })
+  }, [terminalFont, monoFont, fontSize])
 
   useEffect(() => {
     if (!tab.exit) return
     showPopup(null)
-    const reason = tab.exit.reason ?? `退出码 ${tab.exit.code}`
-    termRef.current?.term.write(`\r\n\x1b[90m[会话已结束：${reason}]\x1b[0m\r\n`)
+    const reason = tab.exit.reason ? t(tab.exit.reason) : t('退出码 {code}', { code: tab.exit.code })
+    termRef.current?.term.write(`\r\n\x1b[90m${t('[会话已结束：{reason}]', { reason })}\x1b[0m\r\n`)
   }, [tab.exit])
 
   useEffect(() => {
@@ -328,29 +369,32 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
                 termRef.current?.term.focus()
               }}
             >
-              <span className={`suggest-kind kind-${item.kind}`}>{KIND_LABEL[item.kind]}</span>
+              <span className={`suggest-kind kind-${item.kind}`}>{KIND_LABEL()[item.kind]}</span>
               <span className="suggest-label mono">{item.label}</span>
-              {item.desc && <span className="suggest-desc">{item.desc}</span>}
+              {item.desc && <span className="suggest-desc">{t(item.desc)}</span>}
             </div>
           ))}
-          <div className="suggest-footer">Tab / → 补全 · ↑↓ 选择 · Esc 关闭</div>
+          <div className="suggest-footer">{t('Tab / → 补全 · ↑↓ 选择 · Esc 关闭')}</div>
         </div>
       )}
       {menu && (
         <div className="context-menu" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
           <button disabled={!menu.hasSelection} onClick={() => runMenu(() => void copySelection())}>
-            复制<kbd>{isMac ? '⌘C' : 'Ctrl+Shift+C'}</kbd>
+            {t('复制')}
+            <kbd>{isMac ? '⌘C' : 'Ctrl+C'}</kbd>
           </button>
           <button disabled={!interactive} onClick={() => runMenu(paste)}>
-            粘贴<kbd>{isMac ? '⌘V' : 'Ctrl+Shift+V'}</kbd>
+            {t('粘贴')}
+            <kbd>{isMac ? '⌘V' : 'Ctrl+V'}</kbd>
           </button>
           <button onClick={() => runMenu(() => termRef.current?.term.selectAll())}>
-            全选<kbd>{isMac ? '⌘A' : ''}</kbd>
+            {t('全选')}
+            <kbd>{isMac ? '⌘A' : ''}</kbd>
           </button>
-          <button onClick={() => runMenu(() => termRef.current?.term.clear())}>清屏</button>
+          <button onClick={() => runMenu(() => termRef.current?.term.clear())}>{t('清屏')}</button>
         </div>
       )}
-      {dropping && <div className="terminal-drop-hint">松开鼠标，插入文件的绝对路径</div>}
+      {dropping && <div className="terminal-drop-hint">{t('松开鼠标，插入文件的绝对路径')}</div>}
     </div>
   )
 }

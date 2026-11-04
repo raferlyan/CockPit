@@ -1,13 +1,17 @@
 import { randomBytes } from 'node:crypto'
 import { stat } from 'node:fs/promises'
 import { basename } from 'node:path'
-import type { RemoteEntry, TransferProgress, TransferResult } from '@shared/files'
+import type { DiskUsage, RemoteEntry, TransferProgress, TransferResult } from '@shared/files'
 import type { AdbClient } from '../adb/AdbClient'
 import { syncPush } from '../adb/sync'
-import { isPermissionError, listCommand, parseLsOutput, remoteJoin, shellQuote } from './remotePath'
+import { diskUsageCommand, isPermissionError, listCommand, parseDiskUsage, parseLsOutput, remoteJoin, shellQuote } from './remotePath'
 
 /** 大文件走 USB 2.0 也可能要几分钟，给足时间 */
 const TRANSFER_TIMEOUT = 30 * 60_000
+/** root 复制已在设备上的文件，正常几秒内完成；su 授权弹窗没人点时不至于一直等 */
+const ROOT_COPY_TIMEOUT = 2 * 60_000
+/** /data 这种文件多的分区 du 要跑很久 */
+const DU_TIMEOUT = 3 * 60_000
 /** root 中转用的临时目录，shell 用户可读写 */
 const STAGING_DIR = '/data/local/tmp'
 
@@ -30,6 +34,8 @@ export class FileService {
     try {
       return parseLsOutput(await this.adb.shell(serial, command, { timeout: 15_000 }))
     } catch (error) {
+      if (/No such file or directory/i.test((error as Error).message)) throw new Error(`目录不存在：${dir}`)
+      if (/Not a directory/i.test((error as Error).message)) throw new Error(`不是目录：${dir}`)
       if (!isPermissionError((error as Error).message)) throw error
       const out = await this.asRoot(serial, command, new Error(`${dir}: Permission denied`))
       return parseLsOutput(out)
@@ -40,32 +46,42 @@ export class FileService {
    * 逐个上传到设备目录，单个失败不影响其它文件。
    * 普通文件走 sync 协议并回报进度；目录交给 `adb push`，只回报开始和结束。
    */
-  async push(serial: string, localPaths: string[], remoteDir: string, onProgress?: (progress: TransferProgress) => void): Promise<TransferResult[]> {
+  async push(
+    serial: string,
+    localPaths: string[],
+    remoteDir: string,
+    onProgress?: (progress: TransferProgress) => void,
+    signal?: AbortSignal
+  ): Promise<TransferResult[]> {
     const sizes = await Promise.all(localPaths.map((p) => stat(p).then((s) => (s.isFile() ? s.size : 0)).catch(() => 0)))
     const total = sizes.reduce((a, b) => a + b, 0)
-    const writable = await this.prepareDir(serial, remoteDir)
+    const writable = await this.prepareDir(serial, remoteDir, signal)
 
     const results: TransferResult[] = []
     let done = 0
     for (const [index, local] of localPaths.entries()) {
       const name = basename(local)
       const target = remoteJoin(remoteDir, name)
+      if (signal?.aborted) {
+        results.push({ source: local, target, ok: false, message: '已取消' })
+        continue
+      }
       const report = (fileSent: number) =>
         onProgress?.({ index, count: localPaths.length, name, fileSent, fileTotal: sizes[index], sent: done + fileSent, total })
       try {
         const viaRoot = !writable
-        if (viaRoot) await this.pushViaRoot(serial, local, remoteDir, target, report)
+        if (viaRoot) await this.pushViaRoot(serial, local, remoteDir, target, report, undefined, signal)
         else {
           try {
-            await this.pushOne(serial, local, target, report)
+            await this.pushOne(serial, local, target, report, signal)
           } catch (error) {
             if (!isPermissionError((error as Error).message)) throw error
-            await this.pushViaRoot(serial, local, remoteDir, target, report, error as Error)
+            await this.pushViaRoot(serial, local, remoteDir, target, report, error as Error, signal)
           }
         }
         results.push({ source: local, target, ok: true, message: viaRoot ? '已通过 root 写入' : '' })
       } catch (error) {
-        results.push({ source: local, target, ok: false, message: (error as Error).message })
+        results.push({ source: local, target, ok: false, message: explainWriteError((error as Error).message) })
       }
       report(sizes[index])
       done += sizes[index]
@@ -91,6 +107,15 @@ export class FileService {
     }
   }
 
+  /** 统计目录下一层各项的占用；asRoot 时用 su 统计，读得到 /data 下各应用的数据 */
+  async diskUsage(serial: string, dir: string, asRoot: boolean): Promise<DiskUsage> {
+    const command = diskUsageCommand(dir)
+    const out = asRoot
+      ? await this.asRoot(serial, command, new Error(`${dir}: Permission denied`), DU_TIMEOUT)
+      : await this.adb.shell(serial, command, { timeout: DU_TIMEOUT })
+    return parseDiskUsage(dir, out, asRoot)
+  }
+
   /** 已安装应用的包名，供终端补全使用 */
   async packages(serial: string): Promise<string[]> {
     const out = await this.adb.shell(serial, 'pm list packages', { timeout: 15_000 })
@@ -101,24 +126,50 @@ export class FileService {
       .sort()
   }
 
-  private async pushOne(serial: string, local: string, target: string, report: (sent: number) => void): Promise<void> {
+  private async pushOne(serial: string, local: string, target: string, report: (sent: number) => void, signal?: AbortSignal): Promise<void> {
     const info = await stat(local)
     if (info.isFile()) {
-      await syncPush(this.adb.serverPort, serial, local, target, (sent) => report(sent), TRANSFER_TIMEOUT)
+      try {
+        await syncPush(this.adb.serverPort, serial, local, target, (sent) => report(sent), TRANSFER_TIMEOUT, signal)
+      } catch (error) {
+        // 取消或中途断开时设备上会留下写了一半的文件，删掉；权限错误时文件根本没建出来，不用管
+        if (!isPermissionError((error as Error).message)) {
+          await this.adb.shell(serial, `rm -f ${shellQuote(target)}`, { timeout: 10_000 }).catch(() => undefined)
+        }
+        throw error
+      }
     } else {
-      await this.adb.exec(['-s', serial, 'push', local, target], { timeout: TRANSFER_TIMEOUT })
+      await this.adb.exec(['-s', serial, 'push', local, target], { timeout: TRANSFER_TIMEOUT, signal })
     }
   }
 
   /** 先以 shell 身份推到临时目录，再用 root 复制过去（cp 让文件取得目标目录的 SELinux 上下文） */
-  private async pushViaRoot(serial: string, local: string, remoteDir: string, target: string, report: (sent: number) => void, cause?: Error): Promise<void> {
+  private async pushViaRoot(
+    serial: string,
+    local: string,
+    remoteDir: string,
+    target: string,
+    report: (sent: number) => void,
+    cause?: Error,
+    signal?: AbortSignal
+  ): Promise<void> {
     const staging = remoteJoin(STAGING_DIR, `cockpit-${randomBytes(4).toString('hex')}-${basename(local)}`)
-    await this.pushOne(serial, local, staging, report)
+    await this.pushOne(serial, local, staging, report, signal)
     try {
+      // 先复制成临时名再改名覆盖：替换正在运行的 APK（如 SystemUI）时旧文件仍被映射，不会先删掉再写
+      const temp = `${target}.cockpit-tmp`
+      const q = shellQuote
       await this.asRoot(
         serial,
-        `mkdir -p ${shellQuote(remoteDir)} && rm -rf ${shellQuote(target)} && cp -r ${shellQuote(staging)} ${shellQuote(target)}`,
-        cause ?? new Error(`${remoteDir}: Permission denied`)
+        [
+          `mkdir -p ${q(remoteDir)} && rm -rf ${q(temp)} && cp -r ${q(staging)} ${q(temp)} || { rm -rf ${q(temp)}; exit 1; }`,
+          // 目录不能 mv 覆盖，先删掉旧的
+          `if [ -d ${q(temp)} ] || [ -d ${q(target)} ]; then rm -rf ${q(target)}; fi`,
+          `mv -f ${q(temp)} ${q(target)}`
+        ].join('; '),
+        cause ?? new Error(`${remoteDir}: Permission denied`),
+        ROOT_COPY_TIMEOUT,
+        signal
       )
     } finally {
       await this.adb.shell(serial, `rm -rf ${shellQuote(staging)}`).catch(() => undefined)
@@ -141,18 +192,18 @@ export class FileService {
   }
 
   /** 确保目录存在，返回 shell 身份能否写入；不能写时上传改走 root */
-  private async prepareDir(serial: string, dir: string): Promise<boolean> {
+  private async prepareDir(serial: string, dir: string, signal?: AbortSignal): Promise<boolean> {
     const q = shellQuote(dir)
-    const out = await this.adb.shell(serial, `mkdir -p ${q} 2>/dev/null; [ -d ${q} ] && [ -w ${q} ] && echo W; exit 0`)
+    const out = await this.adb.shell(serial, `mkdir -p ${q} 2>/dev/null; [ -d ${q} ] && [ -w ${q} ] && echo W; exit 0`, { signal })
     return out.trim() === 'W'
   }
 
   /** 以 root 执行；设备没有可用的 su 时抛出原来的权限错误并说明原因 */
-  private async asRoot(serial: string, command: string, cause: Error): Promise<string> {
+  private async asRoot(serial: string, command: string, cause: Error, timeout = TRANSFER_TIMEOUT, signal?: AbortSignal): Promise<string> {
     const style = await this.suStyle(serial)
     if (style === 'none') throw new Error(`${cause.message}（设备没有可用的 su，无法提权访问）`)
     const wrapped = style === 'dash-c' ? `su -c ${shellQuote(command)}` : `su 0 sh -c ${shellQuote(command)}`
-    return this.adb.shell(serial, wrapped, { timeout: TRANSFER_TIMEOUT })
+    return this.adb.shell(serial, wrapped, { timeout, signal })
   }
 
   /** 探测一次 su 的用法并缓存；失败的结果不缓存，用户在设备上授权后可以重试 */
@@ -173,6 +224,14 @@ export class FileService {
     }
     return cached
   }
+}
+
+/** system、vendor 等分区默认只读，给出处理办法 */
+function explainWriteError(message: string): string {
+  if (/read-only file system/i.test(message)) {
+    return `${message}（该分区是只读的：需要先 adb root && adb disable-verity && adb remount，或在设备上 su 后 mount -o rw,remount 对应分区）`
+  }
+  return message
 }
 
 function lastLine(text: string): string {

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { AdbStatus, Device } from '@shared/models'
 import { api } from './api'
 import { notify } from './notify/notifyStore'
+import { t } from './i18n'
 
 /** 投屏区最多同时放几台设备（按 2–3 台设计，留一台余量） */
 export const MAX_MIRROR_TILES = 4
@@ -53,7 +54,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return
     }
     if (mirrorTiles.length >= MAX_MIRROR_TILES) {
-      notify('info', `投屏区最多放 ${MAX_MIRROR_TILES} 台设备`, '先关闭一个窗格再添加')
+      notify('info', t('投屏区最多放 {n} 台设备', { n: MAX_MIRROR_TILES }), t('先关闭一个窗格再添加'))
       return
     }
     set({ mirrorTiles: [...mirrorTiles, serial], focusedSerial: serial })

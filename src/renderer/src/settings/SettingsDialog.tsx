@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { ThemeSwitch } from '../theme/ThemeSwitch'
-import { useSettingsStore } from './settingsStore'
+import { DEFAULT_TERMINAL_FONT, useSettingsStore, type Language } from './settingsStore'
+import { t } from '../i18n'
 import { useUiStore } from './uiStore'
 import { HIDE_ALL_SHORTCUT, paneShortcut } from './ToolStripe'
 
-const UI_FONTS = [
-  { value: '', label: '系统默认' },
+const UI_FONTS = () => [
+  { value: '', label: t('系统默认') },
   { value: 'PingFang SC', label: '苹方 PingFang SC' },
   { value: 'Microsoft YaHei', label: '微软雅黑' },
   { value: 'HarmonyOS Sans SC', label: 'HarmonyOS Sans' },
@@ -13,8 +14,8 @@ const UI_FONTS = [
   { value: 'MiSans', label: 'MiSans' }
 ]
 
-const MONO_FONTS = [
-  { value: '', label: '系统默认' },
+const MONO_FONTS = () => [
+  { value: '', label: t('系统默认') },
   { value: 'JetBrains Mono', label: 'JetBrains Mono' },
   { value: 'Cascadia Code', label: 'Cascadia Code' },
   { value: 'Fira Code', label: 'Fira Code' },
@@ -23,10 +24,27 @@ const MONO_FONTS = [
   { value: 'Menlo', label: 'Menlo' }
 ]
 
+const TERMINAL_FONTS = () => [
+  { value: DEFAULT_TERMINAL_FONT, label: t('Cascadia Mono（Terminal Preview 默认）') },
+  { value: '', label: t('跟随等宽字体') },
+  { value: 'Cascadia Code', label: 'Cascadia Code' },
+  { value: 'JetBrains Mono', label: 'JetBrains Mono' },
+  { value: 'Fira Code', label: 'Fira Code' },
+  { value: 'Sarasa Mono SC', label: t('更纱黑体 Sarasa Mono') },
+  { value: 'SF Mono', label: 'SF Mono' },
+  { value: 'Menlo', label: 'Menlo' },
+  { value: 'Consolas', label: 'Consolas' }
+]
+
+const LANGUAGES: Array<{ value: Language; label: string }> = [
+  { value: 'zh', label: '简体中文' },
+  { value: 'en', label: 'English' }
+]
+
 const CUSTOM = '__custom__'
 
 /** 预设下拉 + 自定义输入；字体没装时浏览器会退回系统字体 */
-function FontField({ label, value, presets, onChange }: { label: string; value: string; presets: typeof UI_FONTS; onChange(v: string): void }) {
+function FontField({ label, value, presets, onChange }: { label: string; value: string; presets: Array<{ value: string; label: string }>; onChange(v: string): void }) {
   const isPreset = presets.some((p) => p.value === value)
   const [custom, setCustom] = useState(!isPreset)
   const [draft, setDraft] = useState(isPreset ? '' : value)
@@ -51,13 +69,13 @@ function FontField({ label, value, presets, onChange }: { label: string; value: 
               {p.label}
             </option>
           ))}
-          <option value={CUSTOM}>自定义…</option>
+          <option value={CUSTOM}>{t('自定义…')}</option>
         </select>
         {custom && (
           <input
             autoFocus
             value={draft}
-            placeholder="本机已安装的字体名"
+            placeholder={t('本机已安装的字体名')}
             spellCheck={false}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={() => onChange(draft.trim())}
@@ -83,22 +101,32 @@ export function SettingsDialog() {
 
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div className="dialog settings-dialog" role="dialog" aria-label="设置">
+      <div className="dialog settings-dialog" role="dialog" aria-label={t('设置')}>
         <div className="panel-title-row">
-          <h2 className="panel-title">设置</h2>
-          <button className="tool" title="关闭" onClick={close}>
+          <h2 className="panel-title">{t('设置')}</h2>
+          <button className="tool" title={t('关闭')} onClick={close}>
             ×
           </button>
         </div>
 
-        <h3 className="status-heading">外观</h3>
+        <h3 className="status-heading">{t('外观')}</h3>
         <div className="field">
-          <span>主题</span>
+          <span>{t('语言 / Language')}</span>
+          <div className="segmented">
+            {LANGUAGES.map((l) => (
+              <button key={l.value} className={settings.language === l.value ? 'on' : ''} onClick={() => settings.update({ language: l.value })}>
+                {l.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="field">
+          <span>{t('主题')}</span>
           <ThemeSwitch />
         </div>
         <label className="field">
           <span>
-            整体字号（界面缩放）<b className="settings-value">{percent}%</b>
+            {t('整体字号（界面缩放）')}<b className="settings-value">{percent}%</b>
           </span>
           <div className="field-row scale-row">
             <button className="secondary" onClick={() => settings.update({ uiScale: Math.max(0.8, settings.uiScale - 0.05) })}>
@@ -116,13 +144,22 @@ export function SettingsDialog() {
               A+
             </button>
           </div>
-          <small className="muted">快捷键：{window.cockpit.platform === 'darwin' ? '⌘' : 'Ctrl'} + = / − / 0</small>
+          <small className="muted">
+            {t('快捷键：')}
+            {window.cockpit.platform === 'darwin' ? '⌘' : 'Ctrl'} + = / − / 0
+          </small>
         </label>
-        <FontField label="界面字体" value={settings.uiFont} presets={UI_FONTS} onChange={(uiFont) => settings.update({ uiFont })} />
-        <FontField label="等宽字体（终端、路径、数值）" value={settings.monoFont} presets={MONO_FONTS} onChange={(monoFont) => settings.update({ monoFont })} />
+        <FontField label={t('界面字体')} value={settings.uiFont} presets={UI_FONTS()} onChange={(uiFont) => settings.update({ uiFont })} />
+        <FontField label={t('等宽字体（路径、数值）')} value={settings.monoFont} presets={MONO_FONTS()} onChange={(monoFont) => settings.update({ monoFont })} />
+        <FontField
+          label={t('终端字体（Shell、logcat、串口）')}
+          value={settings.terminalFont}
+          presets={TERMINAL_FONTS()}
+          onChange={(terminalFont) => settings.update({ terminalFont })}
+        />
         <label className="field">
           <span>
-            终端字号<b className="settings-value">{settings.terminalFontSize}px</b>
+            {t('终端字号')}<b className="settings-value">{settings.terminalFontSize}px</b>
           </span>
           <input
             type="range"
@@ -134,10 +171,12 @@ export function SettingsDialog() {
           />
         </label>
 
-        <h3 className="status-heading">布局</h3>
+        <h3 className="status-heading">{t('布局')}</h3>
         <p className="muted settings-tip">
-          拖动区域之间的边框可以调整大小，双击边框恢复默认。设备列表、设备信息和终端可以点标题栏的箭头收起成边缘的图标条，快捷键 {paneShortcut('sidebar')} /{' '}
-          {paneShortcut('side')} / {paneShortcut('terminal')}，{HIDE_ALL_SHORTCUT} 一键收起或展开全部。
+          {t(
+            '拖动区域之间的边框可以调整大小，双击边框恢复默认。设备列表、设备信息和终端可以点标题栏的箭头收起成边缘的图标条，快捷键 {a} / {b} / {c}，{all} 一键收起或展开全部。',
+            { a: paneShortcut('sidebar'), b: paneShortcut('side'), c: paneShortcut('terminal'), all: HIDE_ALL_SHORTCUT }
+          )}
         </p>
 
         <div className="dialog-actions settings-actions">
@@ -148,17 +187,17 @@ export function SettingsDialog() {
               useUiStore.getState().setGuideOpen(true)
             }}
           >
-            查看使用向导
+            {t('查看使用向导')}
           </button>
           <button className="secondary" onClick={settings.resetPanes}>
-            恢复默认布局
+            {t('恢复默认布局')}
           </button>
           <span className="spacer" />
           <button className="secondary" onClick={settings.reset}>
-            全部恢复默认
+            {t('全部恢复默认')}
           </button>
           <button className="primary" onClick={close}>
-            完成
+            {t('完成')}
           </button>
         </div>
       </div>

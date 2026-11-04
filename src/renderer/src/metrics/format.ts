@@ -1,4 +1,5 @@
 import type { BatteryStatus, LoadSample } from '@shared/metrics'
+import { t } from '../i18n'
 
 export function formatKB(kb: number): string {
   if (kb >= 1024 ** 2) return `${(kb / 1024 ** 2).toFixed(kb >= 100 * 1024 ** 2 ? 0 : 1)} GB`
@@ -17,13 +18,13 @@ export function formatRate(bytesPerSecond: number): string {
   return `${Math.round(bytesPerSecond)} B/s`
 }
 
-export const BATTERY_STATUS_LABEL: Record<BatteryStatus, string> = {
-  charging: '充电中',
-  discharging: '放电',
-  'not-charging': '未充电',
-  full: '已充满',
-  unknown: '未知'
-}
+export const BATTERY_STATUS_LABEL = (): Record<BatteryStatus, string> => ({
+  charging: t('充电中'),
+  discharging: t('放电'),
+  'not-charging': t('未充电'),
+  full: t('已充满'),
+  unknown: t('未知')
+})
 
 export function memoryUsedPercent(memory: NonNullable<LoadSample['memory']>): number {
   return ((memory.totalKB - memory.availableKB) / memory.totalKB) * 100

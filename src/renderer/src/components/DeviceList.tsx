@@ -7,6 +7,7 @@ import { useAppStore } from '../store'
 import { deviceTitle, STATE_LABEL } from '../labels'
 import { RootBadge } from './RootBadge'
 import { CollapseButton } from '../settings/ToolStripe'
+import { t } from '../i18n'
 
 export function DeviceList() {
   const devices = useAppStore((s) => s.devices)
@@ -16,7 +17,7 @@ export function DeviceList() {
   return (
     <aside className="sidebar" data-tour="device-list">
       <header className="sidebar-header">
-        <span>设备</span>
+        <span>{t('设备')}</span>
         <span className="sidebar-header-end">
           <span className="count">{devices.length}</span>
           <CollapseButton pane="sidebar" />
@@ -32,7 +33,7 @@ export function DeviceList() {
             onSelect={() => focus(device.serial)}
           />
         ))}
-        {devices.length === 0 && <li className="empty">未检测到设备，请连接 USB 并开启调试</li>}
+        {devices.length === 0 && <li className="empty">{t('未检测到设备，请连接 USB 并开启调试')}</li>}
       </ul>
 
       <ConnectForm />
@@ -48,13 +49,13 @@ function DeviceItem({ device, active, onSelect }: { device: Device; active: bool
         <div className="device-item-top">
           <span className={`dot state-${ready ? 'ok' : 'warn'}`} />
           <span className="device-name">{deviceTitle(device)}</span>
-          {ready && <RootBadge state={device.root} compact />}
+          {ready && <RootBadge state={device.root} shellRoot={device.shellRoot} compact />}
         </div>
         <div className="device-item-sub">
           <span className="mono">{device.serial}</span>
           <span>
             {device.connection === 'tcp' ? 'Wi-Fi' : 'USB'}
-            {ready ? '' : ` · ${STATE_LABEL[device.state]}`}
+            {ready ? '' : ` · ${STATE_LABEL()[device.state]}`}
           </span>
         </div>
       </button>
@@ -76,7 +77,7 @@ function ConnectForm() {
       setMessage(await api.adb.connect(address.trim()))
     } catch (error) {
       setMessage(errorMessage(error))
-      notify('error', '无线连接失败', errorMessage(error))
+      notify('error', t('无线连接失败'), errorMessage(error))
     } finally {
       setBusy(false)
     }
@@ -84,7 +85,7 @@ function ConnectForm() {
 
   return (
     <form className="connect-form" data-tour="connect" onSubmit={submit}>
-      <label htmlFor="connect-address">无线连接</label>
+      <label htmlFor="connect-address">{t('无线连接')}</label>
       <div className="connect-row">
         <input
           id="connect-address"
@@ -93,8 +94,8 @@ function ConnectForm() {
           onChange={(e) => setAddress(e.target.value)}
           spellCheck={false}
         />
-        <ActionButton type="submit" disabledReason={busy ? '正在连接，请稍候' : !address.trim() && '先输入设备地址，如 192.168.1.10:5555'}>
-          {busy ? '连接中' : '连接'}
+        <ActionButton type="submit" disabledReason={busy ? t('正在连接，请稍候') : !address.trim() && t('先输入设备地址，如 192.168.1.10:5555')}>
+          {busy ? t('连接中') : t('连接')}
         </ActionButton>
       </div>
       {message && <p className="connect-message">{message}</p>}

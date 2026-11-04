@@ -31,7 +31,11 @@ interface Entry {
 export class ShellService {
   private readonly sessions = new Map<string, Entry>()
 
-  constructor(private readonly adbPath: string) {}
+  /** onRootChange：某台设备「是否有终端处于 root 身份」变化时回调 */
+  constructor(
+    private readonly adbPath: string,
+    private readonly onRootChange?: (serial: string, root: boolean) => void
+  ) {}
 
   open(owner: WebContents, serial: string, options: TerminalOpenOptions): TerminalSessionInfo {
     const args = ['-s', serial, 'shell']
@@ -61,6 +65,7 @@ export class ShellService {
       unwatch()
       this.flush(entry)
       this.sessions.delete(info.id)
+      if (entry.identity === 'root') this.notifyRoot(serial)
       this.emit(owner, { type: 'exit', id: info.id, code: exitCode, reason: entry.closeReason })
     })
 
@@ -112,9 +117,16 @@ export class ShellService {
     entry.tail = (entry.tail + data).slice(-TAIL_SIZE)
     const identity = detectIdentity(entry.tail)
     if (identity && identity !== entry.identity) {
+      const wasRoot = entry.identity === 'root'
       entry.identity = identity
       this.emit(entry.owner, { type: 'identity', id: entry.info.id, identity })
+      if (wasRoot !== (identity === 'root')) this.notifyRoot(entry.info.serial)
     }
+  }
+
+  private notifyRoot(serial: string): void {
+    const root = [...this.sessions.values()].some((e) => e.info.serial === serial && e.identity === 'root')
+    this.onRootChange?.(serial, root)
   }
 
   private emit(owner: WebContents, event: TerminalEvent): void {

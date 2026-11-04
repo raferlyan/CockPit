@@ -6,6 +6,8 @@ import { encodeRequest, parseDeviceList, readLengthPrefixed, type ListedDevice }
 export interface ExecOptions {
   /** 毫秒，默认 15s */
   timeout?: number
+  /** 取消时结束 adb 子进程 */
+  signal?: AbortSignal
 }
 
 export class AdbError extends Error {
@@ -41,9 +43,13 @@ export class AdbClient {
       execFile(
         this.adbPath,
         args,
-        { timeout: options.timeout ?? DEFAULT_TIMEOUT, maxBuffer: 32 * 1024 * 1024, windowsHide: true },
+        { timeout: options.timeout ?? DEFAULT_TIMEOUT, maxBuffer: 32 * 1024 * 1024, windowsHide: true, signal: options.signal },
         (error, stdout, stderr) => {
           if (error) {
+            if (options.signal?.aborted) {
+              reject(new AdbError('已取消', stderr, 'ABORT_ERR'))
+              return
+            }
             const reason = error.killed
               ? `timed out after ${options.timeout ?? DEFAULT_TIMEOUT}ms`
               : stderr.trim() || `exit code ${error.code}`

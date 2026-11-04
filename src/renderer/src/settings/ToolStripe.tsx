@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react'
 import { useAppStore } from '../store'
 import { useTerminalStore } from '../terminal/terminalStore'
 import { useSettingsStore, type PaneSizes } from './settingsStore'
+import { t } from '../i18n'
 
 type Pane = keyof PaneSizes
 
@@ -12,7 +13,7 @@ const MOD = isMac ? '⌘' : 'Ctrl+'
 const SHORTCUT_KEYS: Record<Pane, string> = { sidebar: '1', side: '2', terminal: '3' }
 export const HIDE_ALL_SHORTCUT = isMac ? '⌘⇧F12' : 'Ctrl+Shift+F12'
 
-export const PANE_LABEL: Record<Pane, string> = { sidebar: '设备列表', side: '设备信息', terminal: '终端' }
+export const PANE_LABEL = (): Record<Pane, string> => ({ sidebar: t('设备列表'), side: t('设备信息'), terminal: t('终端') })
 
 export function paneShortcut(pane: Pane): string {
   return `${MOD}${SHORTCUT_KEYS[pane]}`
@@ -46,8 +47,8 @@ export function CollapseButton({ pane }: { pane: Pane }) {
     <button
       className="collapse-button"
       data-tour={`collapse-${pane}`}
-      title={`收起${PANE_LABEL[pane]}（${paneShortcut(pane)}）`}
-      aria-label={`收起${PANE_LABEL[pane]}`}
+      title={t('收起{name}（{key}）', { name: PANE_LABEL()[pane], key: paneShortcut(pane) })}
+      aria-label={t('收起{name}', { name: PANE_LABEL()[pane] })}
       onClick={() => useSettingsStore.getState().toggleCollapsed(pane, true)}
     >
       {arrow}
@@ -66,11 +67,11 @@ export function ToolStripe({ pane }: { pane: Pane }) {
     <div className={`tool-stripe tool-stripe-${pane}${vertical ? ' vertical' : ''}`}>
       <button
         className="tool-stripe-button"
-        title={`展开${PANE_LABEL[pane]}（${paneShortcut(pane)}）`}
+        title={t('展开{name}（{key}）', { name: PANE_LABEL()[pane], key: paneShortcut(pane) })}
         onClick={() => useSettingsStore.getState().toggleCollapsed(pane, false)}
       >
         {ICONS[pane]}
-        <span className="tool-stripe-label">{PANE_LABEL[pane]}</span>
+        <span className="tool-stripe-label">{PANE_LABEL()[pane]}</span>
         {badge !== null && <span className="tool-stripe-badge">{badge}</span>}
       </button>
     </div>

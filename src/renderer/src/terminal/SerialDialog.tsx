@@ -3,6 +3,7 @@ import { COMMON_BAUD_RATES, DEFAULT_SERIAL_OPTIONS, type SerialOptions, type Ser
 import { api } from '../api'
 import { ActionButton } from '../notify/ActionButton'
 import { errorMessage, notify } from '../notify/notifyStore'
+import { t } from '../i18n'
 
 const STORAGE_KEY = 'cockpit.serial.last'
 
@@ -45,7 +46,7 @@ export function SerialDialog({ onOpen, onCancel }: { onOpen(options: SerialOptio
       setOptions((o) => (list.some((p) => p.path === o.path) || list.length !== 1 ? o : { ...o, path: list[0].path }))
     } catch (error) {
       setPorts([])
-      notify('error', '扫描串口失败', errorMessage(error))
+      notify('error', t('扫描串口失败'), errorMessage(error))
     } finally {
       setScanning(false)
     }
@@ -65,7 +66,7 @@ export function SerialDialog({ onOpen, onCancel }: { onOpen(options: SerialOptio
   }
 
   const baudValid = Number.isInteger(options.baudRate) && options.baudRate > 0
-  const disabledReason = opening ? '正在打开串口' : !options.path.trim() ? '先选择或输入串口设备' : !baudValid && '波特率需要是正整数'
+  const disabledReason = opening ? t('正在打开串口') : !options.path.trim() ? t('先选择或输入串口设备') : !baudValid && t('波特率需要是正整数')
 
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
@@ -78,10 +79,10 @@ export function SerialDialog({ onOpen, onCancel }: { onOpen(options: SerialOptio
         }}
         onKeyDown={(e) => e.key === 'Escape' && onCancel()}
       >
-        <h2 className="panel-title">打开串口</h2>
+        <h2 className="panel-title">{t('打开串口')}</h2>
 
         <label className="field">
-          <span>串口设备</span>
+          <span>{t('串口设备')}</span>
           <div className="field-row">
             <input
               className="mono"
@@ -99,8 +100,8 @@ export function SerialDialog({ onOpen, onCancel }: { onOpen(options: SerialOptio
                 </option>
               ))}
             </datalist>
-            <ActionButton type="button" className="secondary" disabledReason={scanning && '正在扫描'} onClick={() => void scan()}>
-              {scanning ? '扫描中' : '刷新'}
+            <ActionButton type="button" className="secondary" disabledReason={scanning && t('正在扫描')} onClick={() => void scan()}>
+              {scanning ? t('扫描中') : t('刷新')}
             </ActionButton>
           </div>
         </label>
@@ -108,7 +109,7 @@ export function SerialDialog({ onOpen, onCancel }: { onOpen(options: SerialOptio
           <div className="serial-ports">
             {ports.length === 0 ? (
               <p className="muted">
-                没有发现串口。插上 USB 转串口线后点「刷新」；如果仍然没有，检查是否装了对应芯片（CH340、CP210x、FTDI 等）的驱动。也可以直接输入设备路径。
+                {t(t('没有发现串口。插上 USB 转串口线后点「刷新」；如果仍然没有，检查是否装了对应芯片（CH340、CP210x、FTDI 等）的驱动。也可以直接输入设备路径。'))}
               </p>
             ) : (
               ports.map((p) => (
@@ -122,7 +123,7 @@ export function SerialDialog({ onOpen, onCancel }: { onOpen(options: SerialOptio
 
         <div className="field-grid">
           <label className="field">
-            <span>波特率</span>
+            <span>{t('波特率')}</span>
             <input
               className="mono"
               list="serial-bauds"
@@ -137,7 +138,7 @@ export function SerialDialog({ onOpen, onCancel }: { onOpen(options: SerialOptio
             </datalist>
           </label>
           <label className="field">
-            <span>数据位</span>
+            <span>{t('数据位')}</span>
             <select value={options.dataBits} onChange={(e) => set('dataBits', Number(e.target.value) as SerialOptions['dataBits'])}>
               {[8, 7, 6, 5].map((v) => (
                 <option key={v} value={v}>
@@ -147,17 +148,17 @@ export function SerialDialog({ onOpen, onCancel }: { onOpen(options: SerialOptio
             </select>
           </label>
           <label className="field">
-            <span>校验</span>
+            <span>{t('校验')}</span>
             <select value={options.parity} onChange={(e) => set('parity', e.target.value as SerialOptions['parity'])}>
-              <option value="none">无</option>
-              <option value="even">偶校验</option>
-              <option value="odd">奇校验</option>
+              <option value="none">{t('无')}</option>
+              <option value="even">{t('偶校验')}</option>
+              <option value="odd">{t('奇校验')}</option>
               <option value="mark">Mark</option>
               <option value="space">Space</option>
             </select>
           </label>
           <label className="field">
-            <span>停止位</span>
+            <span>{t('停止位')}</span>
             <select value={options.stopBits} onChange={(e) => set('stopBits', Number(e.target.value) as SerialOptions['stopBits'])}>
               <option value={1}>1</option>
               <option value={1.5}>1.5</option>
@@ -165,7 +166,7 @@ export function SerialDialog({ onOpen, onCancel }: { onOpen(options: SerialOptio
             </select>
           </label>
           <label className="field">
-            <span>回车发送</span>
+            <span>{t('回车发送')}</span>
             <select value={options.enter} onChange={(e) => set('enter', e.target.value as SerialOptions['enter'])}>
               <option value="CR">CR (\r)</option>
               <option value="LF">LF (\n)</option>
@@ -176,19 +177,19 @@ export function SerialDialog({ onOpen, onCancel }: { onOpen(options: SerialOptio
 
         <div className="field-checks">
           <label>
-            <input type="checkbox" checked={options.rtscts} onChange={(e) => set('rtscts', e.target.checked)} /> 硬件流控 RTS/CTS
+            <input type="checkbox" checked={options.rtscts} onChange={(e) => set('rtscts', e.target.checked)} /> {t('硬件流控 RTS/CTS')}
           </label>
           <label>
-            <input type="checkbox" checked={options.localEcho} onChange={(e) => set('localEcho', e.target.checked)} /> 本地回显（设备不回显输入时打开）
+            <input type="checkbox" checked={options.localEcho} onChange={(e) => set('localEcho', e.target.checked)} /> {t('本地回显（设备不回显输入时打开）')}
           </label>
         </div>
 
         <div className="dialog-actions">
           <button type="button" className="secondary" onClick={onCancel}>
-            取消
+            {t(t('取消'))}
           </button>
           <ActionButton type="submit" className="primary" disabledReason={disabledReason}>
-            {opening ? '打开中' : '打开'}
+            {opening ? t('打开中') : t('打开')}
           </ActionButton>
         </div>
       </form>

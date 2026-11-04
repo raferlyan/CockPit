@@ -45,6 +45,8 @@ export interface Device {
   /** 设备进入 `device` 状态后异步拉取 */
   info?: DeviceInfo
   root: RootState
+  /** 应用内有终端通过 su 切到了 root（提示符为 #），与 adbd 是否 root 无关 */
+  shellRoot?: boolean
   /** 拉取设备信息失败时的错误 */
   infoError?: string
 }

@@ -3,7 +3,7 @@ import type { ControlInput, MirrorEvent, MirrorOptions, MirrorSessionInfo } from
 import type { AdbStatus, Device } from './models'
 import type { TerminalEvent, TerminalOpenOptions, TerminalSessionInfo } from './terminal'
 import type { SerialOptions, SerialPortInfo } from './serial'
-import type { RemoteEntry, TransferProgressEvent, TransferResult } from './files'
+import type { DiskUsage, RemoteEntry, TransferProgressEvent, TransferResult } from './files'
 import type { AppAction, AppPackage, InstallResult } from './apps'
 import type { ThemeMode } from './theme'
 import type { TraceFile, TraceRecordEvent, TraceRecordOptions, TraceSource } from './trace'
@@ -42,6 +42,12 @@ export const IpcChannel = {
   /** 主进程 → 渲染进程，上传进度 */
   FilesProgress: 'files:progress',
   FilesPickApk: 'files:pickApk',
+  FilesCancel: 'files:cancel',
+  FilesDiskUsage: 'files:diskUsage',
+  FilesSaveText: 'files:saveText',
+  AppsPids: 'apps:pids',
+  DeviceSaveImage: 'device:saveImage',
+  AppSetLanguage: 'app:setLanguage',
   AppsList: 'apps:list',
   AppsRun: 'apps:run',
   AppsExport: 'apps:export',
@@ -102,6 +108,8 @@ export interface CockpitApi {
     onError(listener: (message: string) => void): () => void
     /** 整体界面缩放（字号、间距一起放大），1 为原始大小 */
     setZoom(factor: number): void
+    /** 主进程的对话框标题、错误信息跟随界面语言 */
+    setLanguage(language: 'zh' | 'en'): void
   }
   apps: {
     /** 全量扫描设备上的应用（含系统应用、已对当前用户卸载的系统应用） */
@@ -111,10 +119,17 @@ export interface CockpitApi {
     /** 把 base.apk 下载到本机目录，返回本机文件路径 */
     exportApk(serial: string, pkg: string, apkPath: string, localDir: string): Promise<string>
     install(serial: string, apkPaths: string[]): Promise<InstallResult[]>
+    /** 包名对应的进程号（pidof），没在运行时为空数组 */
+    pids(serial: string, pkg: string): Promise<number[]>
   }
   device: {
-    /** 原始分辨率截图，保存到本机图片目录并复制到剪贴板，返回文件路径 */
-    screenshot(serial: string, label: string): Promise<string>
+    /** 原始分辨率截图，返回 PNG 数据，由用户决定直接保存还是编辑后保存 */
+    screenshot(serial: string): Promise<Uint8Array>
+    /**
+     * 保存 PNG 并复制到剪贴板：saveAs 为 false 时存到「图片/Cockpit」，
+     * 为 true 时弹出另存为对话框（取消时返回 null）；返回文件路径。
+     */
+    saveImage(png: Uint8Array, label: string, saveAs: boolean): Promise<string | null>
   }
   theme: {
     get(): Promise<ThemeMode>
@@ -164,6 +179,12 @@ export interface CockpitApi {
     list(serial: string, dir: string): Promise<RemoteEntry[]>
     /** transferId 用来在 onProgress 里认出本次上传的进度 */
     push(serial: string, localPaths: string[], remoteDir: string, transferId?: string): Promise<TransferResult[]>
+    /** 取消进行中的上传，push 会尽快返回，未完成的文件标记为已取消 */
+    cancel(transferId: string): void
+    /** 统计目录下一层各项的占用 */
+    diskUsage(serial: string, dir: string, asRoot: boolean): Promise<DiskUsage>
+    /** 弹出保存对话框把文本写到本机，取消时返回 null */
+    saveText(defaultName: string, text: string): Promise<string | null>
     onProgress(listener: (event: TransferProgressEvent) => void): () => void
     /** 系统对话框选择 APK，取消时返回空数组 */
     pickApk(): Promise<string[]>

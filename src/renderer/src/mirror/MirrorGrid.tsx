@@ -2,6 +2,7 @@ import { MAX_MIRROR_TILES, useAppStore } from '../store'
 import { deviceTitle, STATE_LABEL } from '../labels'
 import { ErrorBoundary } from '../notify/ErrorBoundary'
 import { MirrorView } from './MirrorView'
+import { t } from '../i18n'
 
 /** 1–3 台排成一行（手机竖屏并排最省空间），4 台排成 2×2 */
 function columnsFor(count: number): number {
@@ -30,15 +31,15 @@ export function MirrorGrid() {
         {tiles.length > 1 && (
           <div className="segmented">
             <button className={single ? '' : 'on'} onClick={() => setMirrorLayout('grid')}>
-              网格
+              {t('网格')}
             </button>
             <button className={single ? 'on' : ''} onClick={() => setMirrorLayout('single')}>
-              单台
+              {t('单台')}
             </button>
           </div>
         )}
         <span className="muted">
-          {tiles.length} / {MAX_MIRROR_TILES} 台
+          {t('{n} / {max} 台', { n: tiles.length, max: MAX_MIRROR_TILES })}
         </span>
         <span className="spacer" />
         {candidates.length > 0 && (
@@ -46,9 +47,9 @@ export function MirrorGrid() {
             className="mirror-add"
             value=""
             onChange={(e) => e.target.value && addTile(e.target.value)}
-            title="把另一台在线设备加入投屏区"
+            title={t('把另一台在线设备加入投屏区')}
           >
-            <option value="">+ 添加设备</option>
+            <option value="">+ {t('添加设备')}</option>
             {candidates.map((d) => (
               <option key={d.serial} value={d.serial}>
                 {deviceTitle(d)}（{d.serial}）
@@ -56,8 +57,8 @@ export function MirrorGrid() {
             ))}
           </select>
         )}
-        <button className="tool" title="停止全部投屏，中间区域回到设备状态" onClick={closeMirrors}>
-          收起投屏
+        <button className="tool" title={t('停止全部投屏，中间区域回到设备状态')} onClick={closeMirrors}>
+          {t('收起投屏')}
         </button>
       </div>
 
@@ -70,16 +71,16 @@ export function MirrorGrid() {
             return hidden ? null : (
               <div key={serial} className="mirror-offline placeholder">
                 <span>
-                  {deviceTitle(device)}：{STATE_LABEL[device.state]}
+                  {deviceTitle(device)}：{STATE_LABEL()[device.state]}
                 </span>
                 <button className="secondary" onClick={() => removeTile(serial)}>
-                  关闭窗格
+                  {t('关闭窗格')}
                 </button>
               </div>
             )
           }
           return (
-            <ErrorBoundary key={serial} name={`${deviceTitle(device)} 投屏`}>
+            <ErrorBoundary key={serial} name={t('{name} 投屏', { name: deviceTitle(device) })}>
               <MirrorView
                 device={device}
                 active={serial === focusedSerial}
@@ -91,7 +92,7 @@ export function MirrorGrid() {
             </ErrorBoundary>
           )
         })}
-        {visibleCount === 0 && <div className="placeholder mirror-empty">在右侧设备信息里点「投屏」，或从右上角「+ 添加设备」</div>}
+        {visibleCount === 0 && <div className="placeholder mirror-empty">{t('在右侧设备信息里点「投屏」，或从右上角「+ 添加设备」')}</div>}
       </div>
     </section>
   )

@@ -35,16 +35,19 @@ const api: CockpitApi = {
   },
   app: {
     onError: (listener) => subscribe(IpcChannel.AppError, listener),
-    setZoom: (factor) => webFrame.setZoomFactor(Math.min(Math.max(factor, 0.7), 1.6))
+    setZoom: (factor) => webFrame.setZoomFactor(Math.min(Math.max(factor, 0.7), 1.6)),
+    setLanguage: (language) => ipcRenderer.send(IpcChannel.AppSetLanguage, language)
   },
   apps: {
     list: (serial) => ipcRenderer.invoke(IpcChannel.AppsList, serial),
     run: (serial, pkg, action, kind) => ipcRenderer.invoke(IpcChannel.AppsRun, serial, pkg, action, kind),
     exportApk: (serial, pkg, apkPath, localDir) => ipcRenderer.invoke(IpcChannel.AppsExport, serial, pkg, apkPath, localDir),
-    install: (serial, apkPaths) => ipcRenderer.invoke(IpcChannel.AppsInstall, serial, apkPaths)
+    install: (serial, apkPaths) => ipcRenderer.invoke(IpcChannel.AppsInstall, serial, apkPaths),
+    pids: (serial, pkg) => ipcRenderer.invoke(IpcChannel.AppsPids, serial, pkg)
   },
   device: {
-    screenshot: (serial, label) => ipcRenderer.invoke(IpcChannel.DeviceScreenshot, serial, label)
+    screenshot: (serial) => ipcRenderer.invoke(IpcChannel.DeviceScreenshot, serial),
+    saveImage: (png, label, saveAs) => ipcRenderer.invoke(IpcChannel.DeviceSaveImage, png, label, saveAs)
   },
   theme: {
     get: () => ipcRenderer.invoke(IpcChannel.ThemeGet),
@@ -79,6 +82,9 @@ const api: CockpitApi = {
     pickDirectory: () => ipcRenderer.invoke(IpcChannel.FilesPickDirectory),
     list: (serial, dir) => ipcRenderer.invoke(IpcChannel.FilesList, serial, dir),
     push: (serial, localPaths, remoteDir, transferId) => ipcRenderer.invoke(IpcChannel.FilesPush, serial, localPaths, remoteDir, transferId),
+    cancel: (transferId) => ipcRenderer.send(IpcChannel.FilesCancel, transferId),
+    diskUsage: (serial, dir, asRoot) => ipcRenderer.invoke(IpcChannel.FilesDiskUsage, serial, dir, asRoot),
+    saveText: (defaultName, text) => ipcRenderer.invoke(IpcChannel.FilesSaveText, defaultName, text),
     onProgress: (listener) => subscribe(IpcChannel.FilesProgress, listener),
     pickApk: () => ipcRenderer.invoke(IpcChannel.FilesPickApk),
     pull: (serial, remotePath, localDir) => ipcRenderer.invoke(IpcChannel.FilesPull, serial, remotePath, localDir),

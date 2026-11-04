@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { ThemeMode } from '@shared/theme'
 import { api } from '../api'
 import { errorMessage, notify } from '../notify/notifyStore'
+import { t } from '../i18n'
 
 export type ResolvedTheme = 'light' | 'dark'
 
@@ -20,7 +21,7 @@ export const useThemeStore = create<ThemeState>((set) => ({
   resolved: resolve(),
   setMode: (mode) => {
     set({ mode })
-    api.theme.set(mode).catch((error) => notify('error', '切换主题失败', errorMessage(error)))
+    api.theme.set(mode).catch((error) => notify('error', t('切换主题失败'), errorMessage(error)))
   }
 }))
 

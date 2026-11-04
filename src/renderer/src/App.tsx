@@ -23,6 +23,11 @@ import { AppManagerDialog } from './apps/AppManagerDialog'
 import { TraceView } from './trace/TraceView'
 import { RecordTraceDialog } from './trace/RecordTraceDialog'
 import { connectTraces, useTraceStore } from './trace/traceStore'
+import { ScreenshotDialog } from './apps/ScreenshotDialog'
+import { LoggerExportDialog } from './files/LoggerExportDialog'
+import { useScreenshotStore } from './apps/screenshot'
+import { t, useLanguage } from './i18n'
+import { api } from './api'
 
 /** 收起后图标条的宽（左右）或高（底部），像素 */
 const STRIPE_SIZE = 28
@@ -53,17 +58,24 @@ export function App() {
   useEffect(() => connectSettings(), [])
   useEffect(() => connectTraces(), [])
   usePreventFileNavigation()
+  // 订阅语言：切换时整棵树重渲染（不卸载），主进程的对话框和错误信息也跟着切换
+  const language = useLanguage()
+  useEffect(() => {
+    api.app.setLanguage(language)
+    document.documentElement.lang = language === 'en' ? 'en' : 'zh-CN'
+  }, [language])
   useZoomShortcuts()
   useToolWindowShortcuts()
   const panes = useSettingsStore((s) => s.panes)
   const collapsed = useSettingsStore((s) => s.collapsed)
-  const { settingsOpen, guideOpen, appsSerial, traceOpen } = useUiStore()
+  const { settingsOpen, guideOpen, appsSerial, loggerSerial, traceOpen } = useUiStore()
   // 默认中间显示设备状态；有投屏窗格时投屏占中间，状态挪到右侧
   const mirroring = useAppStore((s) => s.mirrorTiles.length > 0)
   // Perfetto 打开时占中间；投屏窗格只是隐藏，会话不断，收起后原样回来
   const statusAside = mirroring || traceOpen
   const transfer = useFileStore((s) => s.transfer !== null)
   const traceDialogSerial = useTraceStore((s) => s.dialogSerial)
+  const shot = useScreenshotStore((s) => s.shot)
 
   // 收起的区域只占一条图标条；尺寸变量换成图标条的宽 / 高，网格和拖动条位置都跟着变
   const size = (pane: keyof typeof panes, stripe: number) => `${collapsed[pane] ? stripe : panes[pane]}px`
@@ -80,7 +92,7 @@ export function App() {
       {collapsed.sidebar ? (
         <ToolStripe pane="sidebar" />
       ) : (
-        <ErrorBoundary name="设备列表" className="sidebar">
+        <ErrorBoundary name={t('设备列表')} className="sidebar">
           <DeviceList />
         </ErrorBoundary>
       )}
@@ -92,13 +104,13 @@ export function App() {
         )}
         {mirroring ? (
           <div className={traceOpen ? 'is-hidden' : 'contents'}>
-            <ErrorBoundary name="投屏区" className="mirror-area">
+            <ErrorBoundary name={t('投屏区')} className="mirror-area">
               <MirrorGrid />
             </ErrorBoundary>
           </div>
         ) : (
           !traceOpen && (
-            <ErrorBoundary name="设备状态" className="panel center-status">
+            <ErrorBoundary name={t('设备状态')} className="panel center-status">
               <StatusPanel wide />
             </ErrorBoundary>
           )
@@ -107,18 +119,18 @@ export function App() {
           <ToolStripe pane="side" />
         ) : (
           <aside className="side-panels">
-            <ErrorBoundary name="设备信息" className="panel">
+            <ErrorBoundary name={t('设备信息')} className="panel">
               <DeviceDetail />
             </ErrorBoundary>
             {statusAside && (
-              <ErrorBoundary name="设备状态" className="panel">
+              <ErrorBoundary name={t('设备状态')} className="panel">
                 <StatusPanel />
               </ErrorBoundary>
             )}
           </aside>
         )}
         {/* 终端收起时只隐藏不卸载，保留各标签的会话和滚动记录 */}
-        <ErrorBoundary name="终端" className="terminal-area">
+        <ErrorBoundary name={t('终端')} className="terminal-area">
           <TerminalPanel />
         </ErrorBoundary>
         {collapsed.terminal && <ToolStripe pane="terminal" />}
@@ -131,7 +143,9 @@ export function App() {
       <AdbStatusBar />
       {transfer && <FileTransferDialog />}
       {appsSerial && <AppManagerDialog serial={appsSerial} />}
+      {loggerSerial && <LoggerExportDialog serial={loggerSerial} />}
       {traceDialogSerial && <RecordTraceDialog serial={traceDialogSerial} />}
+      {shot && <ScreenshotDialog shot={shot} />}
       {settingsOpen && <SettingsDialog />}
       {guideOpen && <GuideTour />}
       <Toaster />

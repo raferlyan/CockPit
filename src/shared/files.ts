@@ -28,3 +28,22 @@ export interface TransferProgress {
 export interface TransferProgressEvent extends TransferProgress {
   transferId: string
 }
+
+/** 目录下一项的占用 */
+export interface DiskUsageEntry {
+  name: string
+  sizeKB: number
+  /** 是目录（不含符号链接），可以继续进入 */
+  dir: boolean
+}
+
+/** `du` 统计的一层目录占用，entries 按大小降序 */
+export interface DiskUsage {
+  dir: string
+  totalKB: number
+  entries: DiskUsageEntry[]
+  /** 有子目录因权限读不到，数字偏小；可以用 root 重新统计 */
+  partial: boolean
+  /** 本次以 root 身份统计 */
+  root: boolean
+}

@@ -1,5 +1,6 @@
 import { useRef, type PointerEvent } from 'react'
 import { DEFAULT_PANES, useSettingsStore, type PaneSizes } from './settingsStore'
+import { t } from '../i18n'
 
 interface SplitterProps {
   pane: keyof PaneSizes
@@ -45,7 +46,7 @@ export function Splitter({ pane, orientation, direction, className, maxRatio }: 
       className={`splitter splitter-${orientation} ${className}`}
       role="separator"
       aria-orientation={orientation}
-      title="拖动调整大小，双击恢复默认"
+      title={t('拖动调整大小，双击恢复默认')}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

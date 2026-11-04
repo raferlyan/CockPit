@@ -9,6 +9,7 @@ import { useUiStore } from '../settings/uiStore'
 import { takeScreenshot } from '../apps/screenshot'
 import { isRecordingActive, useTraceStore } from '../trace/traceStore'
 import { CollapseButton } from '../settings/ToolStripe'
+import { t } from '../i18n'
 
 export function DeviceDetail() {
   const device = useAppStore((s) => s.devices.find((d) => d.serial === s.focusedSerial))
@@ -21,26 +22,26 @@ export function DeviceDetail() {
     return (
       <section className="panel" data-tour="device-detail">
         <div className="panel-title-row">
-          <h2 className="panel-title">设备信息</h2>
+          <h2 className="panel-title">{t('设备信息')}</h2>
           <CollapseButton pane="side" />
         </div>
-        <p className="empty">未选择设备</p>
+        <p className="empty">{t('未选择设备')}</p>
       </section>
     )
   }
 
   const hint = stateHint(device.state)
-  const offlineReason = device.state !== 'device' && '设备不在线'
+  const offlineReason = device.state !== 'device' && t('设备不在线')
   const info = device.info
   const rows: Array<[string, string | undefined]> = [
-    ['序列号', device.serial],
-    ['状态', STATE_LABEL[device.state]],
-    ['连接', device.connection === 'tcp' ? 'Wi-Fi' : `USB${device.usbPath ? ` (${device.usbPath})` : ''}`],
-    ['厂商', info?.manufacturer],
-    ['型号', info?.model ?? device.model],
+    [t('序列号'), device.serial],
+    [t('状态'), STATE_LABEL()[device.state]],
+    [t('连接方式'), device.connection === 'tcp' ? 'Wi-Fi' : `USB${device.usbPath ? ` (${device.usbPath})` : ''}`],
+    [t('厂商'), info?.manufacturer],
+    [t('型号'), info?.model ?? device.model],
     ['Android', info ? `${info.androidVersion} (API ${info.sdk})` : undefined],
     ['ABI', info?.abi],
-    ['分辨率', info?.resolution]
+    [t('分辨率'), info?.resolution]
   ]
 
   const online = device.state === 'device'
@@ -62,11 +63,11 @@ export function DeviceDetail() {
         handleDeviceDrop(device.serial, paths)
       }}
     >
-      {dropping && <div className="panel-drop-hint">松开鼠标：APK 直接安装，其它文件上传</div>}
+      {dropping && <div className="panel-drop-hint">{t('松开鼠标：APK 直接安装，其它文件上传')}</div>}
       <div className="panel-title-row">
         <h2 className="panel-title">{deviceTitle(device)}</h2>
         <span className="panel-title-end">
-          {device.state === 'device' && <RootBadge state={device.root} />}
+          {device.state === 'device' && <RootBadge state={device.root} shellRoot={device.shellRoot} />}
           <CollapseButton pane="side" />
         </span>
       </div>
@@ -75,15 +76,16 @@ export function DeviceDetail() {
         {rows.map(([key, value]) => (
           <div key={key} className="kv-row">
             <dt>{key}</dt>
-            <dd className={key === '序列号' ? 'mono' : undefined}>{value || '—'}</dd>
+            <dd className={key === t('序列号') ? 'mono' : undefined}>{value || '—'}</dd>
           </div>
         ))}
       </dl>
       {device.infoError && (
         <p className="error">
-          读取设备信息失败：{device.infoError}
+          {t('读取设备信息失败：')}
+          {device.infoError}
           <button className="link" onClick={() => void api.devices.refreshInfo(device.serial)}>
-            重试
+            {t('重试')}
           </button>
         </p>
       )}
@@ -94,32 +96,40 @@ export function DeviceDetail() {
           disabledReason={offlineReason}
           onClick={() => (mirrored ? useAppStore.getState().removeTile(device.serial) : useAppStore.getState().addTile(device.serial))}
         >
-          {mirrored ? '停止投屏' : '投屏'}
+          {mirrored ? t('停止投屏') : t('投屏')}
         </ActionButton>
         <ActionButton
           data-tour="btn-transfer" className="secondary" disabledReason={offlineReason} onClick={() => useFileStore.getState().openTransfer(device.serial)}>
-          文件传输
+          {t('文件传输')}
         </ActionButton>
         <ActionButton
           data-tour="btn-apps" className="secondary" disabledReason={offlineReason} onClick={() => useUiStore.getState().openApps(device.serial)}>
-          应用管理
+          {t('应用管理')}
         </ActionButton>
         <ActionButton
           data-tour="btn-screenshot" className="secondary" disabledReason={offlineReason} onClick={() => void takeScreenshot(device)}>
-          截图
+          {t('截图')}
+        </ActionButton>
+        <ActionButton
+          className="secondary"
+          disabledReason={offlineReason}
+          title={t('把设备上的日志目录（默认 /data/logger）导出到本机')}
+          onClick={() => useUiStore.getState().openLogger(device.serial)}
+        >
+          {t('导出日志')}
         </ActionButton>
         <ActionButton
           data-tour="btn-trace"
           className={tracing ? 'primary' : 'secondary'}
           disabledReason={!tracing && offlineReason}
-          title="用设备自带的 perfetto 录制系统 trace，录完在内嵌的 Perfetto 中打开"
+          title={t('用设备自带的 perfetto 录制系统 trace，录完在内嵌的 Perfetto 中打开')}
           onClick={() => useTraceStore.getState().openDialog(device.serial)}
         >
-          {tracing ? '录制中…' : '录制 Trace'}
+          {tracing ? t('录制中…') : t('录制 Trace')}
         </ActionButton>
         {device.connection === 'tcp' && (
           <button className="secondary" onClick={() => void api.adb.disconnect(device.serial)}>
-            断开无线连接
+            {t('断开无线连接')}
           </button>
         )}
       </div>

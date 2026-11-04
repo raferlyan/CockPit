@@ -9,9 +9,14 @@ export interface AppPackage {
   uninstalled: boolean
   /** base.apk 路径，已卸载的为空 */
   apkPath?: string
+  /** 首次安装时间（毫秒时间戳，设备本地时间），取不到时为空 */
+  firstInstallTime?: number
+  /** 最近一次更新（覆盖安装）时间 */
+  lastUpdateTime?: number
 }
 
-export type AppAction = 'uninstall' | 'restore' | 'disable' | 'enable' | 'forceStop' | 'clearData'
+/** launch：把应用的启动界面拉到前台（已在运行时直接切回） */
+export type AppAction = 'launch' | 'uninstall' | 'restore' | 'disable' | 'enable' | 'forceStop' | 'clearData'
 
 /** 一个 APK 的安装结果 */
 export interface InstallResult {

@@ -1,5 +1,6 @@
 import type { CockpitApi } from '@shared/ipc'
 import { errorMessage, notify, updateToast } from './notify/notifyStore'
+import { t } from './i18n'
 
 /** 超过这个时间还没返回就提示“无响应”，请求本身不取消 */
 const SLOW_AFTER = 8_000
@@ -24,18 +25,22 @@ const LABELS: Record<string, string> = {
 function watch<T>(label: string, promise: Promise<T>): Promise<T> {
   let toastId: number | undefined
   const timer = setTimeout(() => {
-    toastId = notify('warn', `「${label}」已等待 ${SLOW_AFTER / 1000} 秒仍无响应`, '可能是设备卡住或 adb 无响应，可以重新插拔设备，或查看底部状态栏的 adb 状态')
+    toastId = notify(
+      'warn',
+      t('「{label}」已等待 {s} 秒仍无响应', { label: t(label), s: SLOW_AFTER / 1000 }),
+      t('可能是设备卡住或 adb 无响应，可以重新插拔设备，或查看底部状态栏的 adb 状态')
+    )
   }, SLOW_AFTER)
   return promise.then(
     (value) => {
       clearTimeout(timer)
-      if (toastId !== undefined) updateToast(toastId, 'success', `「${label}」已完成`)
+      if (toastId !== undefined) updateToast(toastId, 'success', t('「{label}」已完成', { label: t(label) }))
       return value
     },
     (error) => {
       clearTimeout(timer)
       // 已经提示过无响应的，把结果也告诉用户；其余错误由调用方展示或交给全局兜底
-      if (toastId !== undefined) updateToast(toastId, 'error', `「${label}」失败`, errorMessage(error))
+      if (toastId !== undefined) updateToast(toastId, 'error', t('「{label}」失败', { label: t(label) }), errorMessage(error))
       throw error
     }
   )

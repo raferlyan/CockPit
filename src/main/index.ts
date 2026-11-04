@@ -81,19 +81,20 @@ async function bootstrap(): Promise<void> {
     }
     deviceManager = new DeviceManager(adb, version)
     mirror = new MirrorService(adb, join(resourcesDir(), 'scrcpy-server'))
-    shellService = new ShellService(adbPath)
+    const devices = deviceManager
+    shellService = new ShellService(adbPath, (serial, root) => devices.setShellRoot(serial, root))
     metrics = new MetricsService(adb, (event) => broadcast(IpcChannel.MetricsEvent, event))
     files = new FileService(adb)
     apps = new AppService(adb)
   }
   const traces = new TraceLibrary(join(app.getPath('documents'), 'Cockpit', 'Traces'), (path) => shell.trashItem(path))
   if (adb && deviceManager && metrics) {
-    const devices = deviceManager
+    const manager = deviceManager
     const poller = metrics
     recorder = new TraceRecorder(
       adb,
       traces,
-      (serial) => devices.list().find((d) => d.serial === serial),
+      (serial) => manager.list().find((d) => d.serial === serial),
       (serial, paused) => poller.setPaused(serial, paused),
       (event) => broadcast(IpcChannel.TraceRecordEvent, event)
     )

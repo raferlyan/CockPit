@@ -1,4 +1,6 @@
-import { BrowserWindow, clipboard, dialog, ipcMain, shell as electronShell } from 'electron'
+import { randomUUID } from 'node:crypto'
+import { writeFile } from 'node:fs/promises'
+import { BrowserWindow, clipboard, dialog, ipcMain, shell as electronShell, type IpcMainInvokeEvent } from 'electron'
 import { IpcChannel } from '@shared/ipc'
 import type { AdbStatus } from '@shared/models'
 import type { AdbClient } from './adb/AdbClient'
@@ -19,6 +21,7 @@ import type { PerfettoUiServer } from './trace/PerfettoUiServer'
 import type { TraceLibrary } from './trace/TraceLibrary'
 import type { TraceRecorder } from './trace/TraceRecorder'
 import type { TraceRecordOptions } from '@shared/trace'
+import { setLanguage, tm, translateError } from './i18n'
 
 export function broadcast(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -54,123 +57,176 @@ export function registerIpc(ctx: {
     if (!apps) throw new Error('未找到 adb')
     return apps
   }
+  /** 进行中的上传，可取消；设备断开时自动取消 */
+  const transfers = new Map<string, { serial: string; controller: AbortController }>()
 
-  ipcMain.handle(IpcChannel.DevicesList, () => deviceManager?.list() ?? [])
-  ipcMain.handle(IpcChannel.DevicesRefreshInfo, (_e, serial: string) => deviceManager?.refreshInfo(serial))
-  ipcMain.handle(IpcChannel.AdbStatus, () => deviceManager?.getStatus() ?? ctx.fallbackStatus)
+  // 所有 invoke 的错误信息都跟随界面语言
+  const handle = <A extends unknown[]>(channel: string, listener: (event: IpcMainInvokeEvent, ...args: A) => unknown) =>
+    ipcMain.handle(channel, async (event, ...args) => {
+      try {
+        return await listener(event, ...(args as A))
+      } catch (error) {
+        if (error instanceof Error) error.message = translateError(error.message)
+        throw error
+      }
+    })
 
-  ipcMain.handle(IpcChannel.AdbConnect, async (_e, address: string) => {
+  handle(IpcChannel.DevicesList, () => deviceManager?.list() ?? [])
+  handle(IpcChannel.DevicesRefreshInfo, (_e, serial: string) => deviceManager?.refreshInfo(serial))
+  handle(IpcChannel.AdbStatus, () => deviceManager?.getStatus() ?? ctx.fallbackStatus)
+
+  handle(IpcChannel.AdbConnect, async (_e, address: string) => {
     if (!adb) throw new Error('未找到 adb')
     if (!/^[\w.-]+(:\d{1,5})?$/.test(address)) throw new Error('地址格式应为 host:port')
     return adb.connect(address)
   })
-  ipcMain.handle(IpcChannel.AdbDisconnect, async (_e, serial: string) => {
+  handle(IpcChannel.AdbDisconnect, async (_e, serial: string) => {
     if (!adb) throw new Error('未找到 adb')
     return adb.disconnect(serial)
   })
 
-  ipcMain.handle(IpcChannel.MirrorStart, (event, serial: string, options?: MirrorOptions) => {
+  handle(IpcChannel.MirrorStart, (event, serial: string, options?: MirrorOptions) => {
     if (!mirror) throw new Error('未找到 adb')
     return mirror.start(event.sender, serial, options)
   })
-  ipcMain.handle(IpcChannel.MirrorStop, (_e, sessionId: string) => mirror?.stop(sessionId))
+  handle(IpcChannel.MirrorStop, (_e, sessionId: string) => mirror?.stop(sessionId))
   ipcMain.on(IpcChannel.MirrorControl, (_e, sessionId: string, input: ControlInput) => mirror?.control(sessionId, input))
 
-  ipcMain.handle(IpcChannel.TerminalOpen, (event, serial: string, options: TerminalOpenOptions) => {
+  handle(IpcChannel.TerminalOpen, (event, serial: string, options: TerminalOpenOptions) => {
     if (!shell) throw new Error('未找到 adb')
     if (!deviceManager?.list().some((d) => d.serial === serial && d.state === 'device')) throw new Error('设备不在线')
     return shell.open(event.sender, serial, options)
   })
-  ipcMain.handle(IpcChannel.TerminalOpenSerial, (event, options: SerialOptions) => serial.open(event.sender, options))
-  ipcMain.handle(IpcChannel.SerialList, () => serial.list())
+  handle(IpcChannel.TerminalOpenSerial, (event, options: SerialOptions) => serial.open(event.sender, options))
+  handle(IpcChannel.SerialList, () => serial.list())
   // 终端 id 全局唯一，各服务只处理自己的会话
   ipcMain.on(IpcChannel.TerminalWrite, (_e, id: string, data: string) => {
     shell?.write(id, data)
     serial.write(id, data)
   })
   ipcMain.on(IpcChannel.TerminalResize, (_e, id: string, cols: number, rows: number) => shell?.resize(id, cols, rows))
-  ipcMain.handle(IpcChannel.TerminalClose, (_e, id: string) => {
+  handle(IpcChannel.TerminalClose, (_e, id: string) => {
     shell?.close(id)
     serial.close(id)
   })
 
-  ipcMain.handle(IpcChannel.DevicesPackages, (_e, serial: string) => requireFiles().packages(serial))
-  ipcMain.handle(IpcChannel.FilesList, (_e, serial: string, dir: string) => requireFiles().list(serial, dir))
-  ipcMain.handle(IpcChannel.FilesPush, (event, serial: string, localPaths: string[], remoteDir: string, transferId?: string) =>
-    requireFiles().push(serial, localPaths, remoteDir, (progress) => {
-      if (transferId && !event.sender.isDestroyed()) event.sender.send(IpcChannel.FilesProgress, { transferId, ...progress })
-    })
-  )
-  ipcMain.handle(IpcChannel.FilesPickApk, async (event) => {
+  handle(IpcChannel.DevicesPackages, (_e, serial: string) => requireFiles().packages(serial))
+  handle(IpcChannel.FilesList, (_e, serial: string, dir: string) => requireFiles().list(serial, dir))
+  handle(IpcChannel.FilesPush, async (event, serial: string, localPaths: string[], remoteDir: string, transferId?: string) => {
+    const controller = new AbortController()
+    const id = transferId ?? randomUUID()
+    transfers.set(id, { serial, controller })
+    try {
+      const results = await requireFiles().push(
+        serial,
+        localPaths,
+        remoteDir,
+        (progress) => {
+          if (transferId && !event.sender.isDestroyed()) event.sender.send(IpcChannel.FilesProgress, { transferId, ...progress })
+        },
+        controller.signal
+      )
+      return results.map((r) => ({ ...r, message: translateError(r.message) }))
+    } finally {
+      transfers.delete(id)
+    }
+  })
+  ipcMain.on(IpcChannel.FilesCancel, (_e, transferId: string) => transfers.get(transferId)?.controller.abort())
+  handle(IpcChannel.FilesDiskUsage, (_e, serial: string, dir: string, asRoot: boolean) => requireFiles().diskUsage(serial, String(dir), Boolean(asRoot)))
+  handle(IpcChannel.FilesSaveText, async (event, defaultName: string, text: string) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const options = {
-      title: '选择要安装的 APK',
+      title: tm('保存日志'),
+      defaultPath: String(defaultName),
+      filters: [
+        { name: tm('文本文件'), extensions: ['txt', 'log'] },
+        { name: tm('所有文件'), extensions: ['*'] }
+      ]
+    }
+    const result = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+    if (result.canceled || !result.filePath) return null
+    await writeFile(result.filePath, String(text), 'utf8')
+    return result.filePath
+  })
+  handle(IpcChannel.AppsPids, (_e, serial: string, pkg: string) => requireApps().pids(serial, String(pkg)))
+  handle(IpcChannel.DeviceSaveImage, async (event, png: Uint8Array, label: string, saveAs: boolean) => {
+    const win = BrowserWindow.fromWebContents(event.sender) ?? undefined
+    return requireApps().saveImage(Buffer.from(png), String(label), saveAs ? { window: win, title: tm('保存截图'), filterName: tm('图片') } : undefined)
+  })
+  ipcMain.on(IpcChannel.AppSetLanguage, (_e, language: 'zh' | 'en') => setLanguage(language))
+  handle(IpcChannel.FilesPickApk, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const options = {
+      title: tm('选择要安装的 APK'),
       properties: ['openFile', 'multiSelections'] as Array<'openFile' | 'multiSelections'>,
-      filters: [{ name: 'Android 应用', extensions: ['apk'] }]
+      filters: [{ name: tm('Android 应用'), extensions: ['apk'] }]
     }
     const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     return result.canceled ? [] : result.filePaths
   })
-  ipcMain.handle(IpcChannel.AppsList, (_e, serial: string) => requireApps().list(serial))
-  ipcMain.handle(IpcChannel.AppsRun, (_e, serial: string, pkg: string, action: AppAction, kind: AppPackage['kind']) =>
+  handle(IpcChannel.AppsList, (_e, serial: string) => requireApps().list(serial))
+  handle(IpcChannel.AppsRun, (_e, serial: string, pkg: string, action: AppAction, kind: AppPackage['kind']) =>
     requireApps().run(serial, pkg, action, kind)
   )
-  ipcMain.handle(IpcChannel.AppsExport, (_e, serial: string, pkg: string, apkPath: string, localDir: string) =>
+  handle(IpcChannel.AppsExport, (_e, serial: string, pkg: string, apkPath: string, localDir: string) =>
     requireApps().exportApk(serial, pkg, apkPath, localDir)
   )
-  ipcMain.handle(IpcChannel.AppsInstall, (_e, serial: string, apkPaths: string[]) => requireApps().install(serial, apkPaths))
-  ipcMain.handle(IpcChannel.DeviceScreenshot, (_e, serial: string, label: string) => requireApps().screenshot(serial, label))
-  ipcMain.handle(IpcChannel.FilesPull, (_e, serial: string, remotePath: string, localDir: string) =>
-    requireFiles().pull(serial, remotePath, localDir)
-  )
-  ipcMain.handle(IpcChannel.FilesPickLocal, async (event) => {
+  handle(IpcChannel.AppsInstall, (_e, serial: string, apkPaths: string[]) => requireApps().install(serial, apkPaths))
+  handle(IpcChannel.DeviceScreenshot, (_e, serial: string) => requireApps().screenshot(serial))
+  handle(IpcChannel.FilesPull, async (_e, serial: string, remotePath: string, localDir: string) => {
+    const result = await requireFiles().pull(serial, remotePath, localDir)
+    return { ...result, message: translateError(result.message) }
+  })
+  handle(IpcChannel.FilesPickLocal, async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    const options = { title: '选择要上传的文件', properties: ['openFile', 'multiSelections'] as Array<'openFile' | 'multiSelections'> }
+    const options = { title: tm('选择要上传的文件'), properties: ['openFile', 'multiSelections'] as Array<'openFile' | 'multiSelections'> }
     const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     return result.canceled ? [] : result.filePaths
   })
-  ipcMain.handle(IpcChannel.FilesPickDirectory, async (event) => {
+  handle(IpcChannel.FilesPickDirectory, async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    const options = { title: '选择保存位置', properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'> }
+    const options = { title: tm('选择保存位置'), properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'> }
     const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
   ipcMain.on(IpcChannel.FilesReveal, (_e, path: string) => electronShell.showItemInFolder(path))
-  ipcMain.handle(IpcChannel.TraceUiUrl, () => perfetto.uiUrl())
-  ipcMain.handle(IpcChannel.TraceOpen, (_e, localPath: string) => perfetto.register(String(localPath)))
-  ipcMain.handle(IpcChannel.TracePick, async (event) => {
+  handle(IpcChannel.TraceUiUrl, () => perfetto.uiUrl())
+  handle(IpcChannel.TraceOpen, (_e, localPath: string) => perfetto.register(String(localPath)))
+  handle(IpcChannel.TracePick, async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const options = {
-      title: '打开 trace 文件',
+      title: tm('打开 trace 文件'),
       properties: ['openFile'] as Array<'openFile'>,
       filters: [
         { name: 'Trace', extensions: ['pftrace', 'perfetto-trace', 'trace', 'pb', 'json', 'gz', 'zip', 'ctrace', 'html'] },
-        { name: '所有文件', extensions: ['*'] }
+        { name: tm('所有文件'), extensions: ['*'] }
       ]
     }
     const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
-  ipcMain.handle(IpcChannel.TraceList, () => traces.list())
-  ipcMain.handle(IpcChannel.TraceRemove, (_e, path: string) => traces.remove(String(path)))
-  ipcMain.handle(IpcChannel.TraceOpenDir, async () => {
+  handle(IpcChannel.TraceList, () => traces.list())
+  handle(IpcChannel.TraceRemove, (_e, path: string) => traces.remove(String(path)))
+  handle(IpcChannel.TraceOpenDir, async () => {
     const error = await electronShell.openPath(await traces.ensureDir())
     if (error) throw new Error(error)
   })
-  ipcMain.handle(IpcChannel.TraceRecordStart, (_e, serial: string, options: TraceRecordOptions, label: string) => {
+  handle(IpcChannel.TraceRecordStart, (_e, serial: string, options: TraceRecordOptions, label: string) => {
     if (!recorder) throw new Error('未找到 adb')
     return recorder.start(serial, options, String(label))
   })
-  ipcMain.handle(IpcChannel.TraceRecordStop, (_e, serial: string) => recorder?.stop(serial))
-  ipcMain.handle(IpcChannel.TraceRecordList, () => recorder?.list() ?? [])
-  ipcMain.handle(IpcChannel.ThemeGet, () => loadTheme())
-  ipcMain.handle(IpcChannel.ThemeSet, (_e, mode: ThemeMode) => setTheme(mode))
-  ipcMain.handle(IpcChannel.ClipboardRead, () => clipboard.readText())
+  handle(IpcChannel.TraceRecordStop, (_e, serial: string) => recorder?.stop(serial))
+  handle(IpcChannel.TraceRecordList, () => recorder?.list() ?? [])
+  handle(IpcChannel.ThemeGet, () => loadTheme())
+  handle(IpcChannel.ThemeSet, (_e, mode: ThemeMode) => setTheme(mode))
+  handle(IpcChannel.ClipboardRead, () => clipboard.readText())
   ipcMain.on(IpcChannel.ClipboardWrite, (_e, text: string) => clipboard.writeText(String(text)))
 
-  ipcMain.handle(IpcChannel.MetricsSnapshot, (_e, serial: string) => metrics?.snapshot(serial) ?? { serial, history: [] })
+  handle(IpcChannel.MetricsSnapshot, (_e, serial: string) => metrics?.snapshot(serial) ?? { serial, history: [] })
 
   deviceManager?.on('devices', (devices) => {
+    const online = new Set(devices.filter((d) => d.state === 'device').map((d) => d.serial))
+    for (const transfer of transfers.values()) if (!online.has(transfer.serial)) transfer.controller.abort()
     mirror?.onDevicesChanged(devices)
     shell?.onDevicesChanged(devices)
     metrics?.onDevicesChanged(devices)

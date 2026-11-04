@@ -3,6 +3,7 @@ import { useAppStore } from '../store'
 import { useUiStore } from './uiStore'
 import { useSettingsStore, type CollapsedPanes } from './settingsStore'
 import { HIDE_ALL_SHORTCUT, paneShortcut } from './ToolStripe'
+import { t } from '../i18n'
 
 const isMac = window.cockpit.platform === 'darwin'
 
@@ -18,108 +19,112 @@ interface TourStep {
   trace?: boolean
 }
 
-const STEPS: TourStep[] = [
+/** 函数形式，切换语言后重新取文字 */
+const STEPS = (): TourStep[] => [
   {
-    title: '欢迎使用 Cockpit',
-    body: '投屏、终端、文件传输、应用管理、状态监控和 Perfetto trace 分析都在这一个窗口里。接下来逐个指给你看，随时可以按 Esc 跳过，之后在「设置」里能再次打开。'
+    title: t('欢迎使用 Cockpit'),
+    body: t('投屏、终端、文件传输、应用管理、状态监控和 Perfetto trace 分析都在这一个窗口里。接下来逐个指给你看，随时可以按 Esc 跳过，之后在「设置」里能再次打开。')
   },
   {
     target: 'device-list',
-    title: '设备列表',
-    body: '在手机「开发者选项」中打开「USB 调试」，用数据线连上电脑并在手机上允许调试授权，设备就会出现在这里。点击选中一台设备，右侧和中间区域都会切换到它。'
+    title: t('设备列表'),
+    body: t('在手机「开发者选项」中打开「USB 调试」，用数据线连上电脑并在手机上允许调试授权，设备就会出现在这里。点击选中一台设备，右侧和中间区域都会切换到它。')
   },
   {
     target: 'connect',
-    title: '无线连接',
-    body: '手机开启无线调试后，在这里输入 IP:端口 连接，之后和 USB 设备一样使用。'
+    title: t('无线连接'),
+    body: t('手机开启无线调试后，在这里输入 IP:端口 连接，之后和 USB 设备一样使用。')
   },
   {
     target: 'device-detail',
-    title: '设备信息',
-    body: '型号、Android 版本、ABI、分辨率等信息固定显示在右上方。把 APK 拖到这里直接安装，其它文件会打开「文件传输」。'
+    title: t('设备信息'),
+    body: t('型号、Android 版本、ABI、分辨率等信息固定显示在右上方。把 APK 拖到这里直接安装，其它文件会打开「文件传输」。')
   },
   {
     target: 'btn-mirror',
     fallback: 'device-detail',
-    missing: '选中一台在线设备后，这里会出现「投屏」按钮。',
-    title: '投屏与操控',
-    body: '画面会出现在中间区域，可以直接用鼠标点按、滚轮滑动、键盘输入（支持中文）。右键是返回，中键是主页，最多 4 台设备同时投屏。'
+    missing: t('选中一台在线设备后，这里会出现「投屏」按钮。'),
+    title: t('投屏与操控'),
+    body: t('画面会出现在中间区域，可以直接用鼠标点按、滚轮滑动、键盘输入（支持中文）。右键是返回，中键是主页，最多 4 台设备同时投屏。')
   },
   {
     target: 'btn-transfer',
     fallback: 'device-detail',
-    missing: '选中一台在线设备后，这里会出现「文件传输」按钮。',
-    title: '文件传输',
-    body: '左边选本机文件，右边选设备目录后上传；设备上的文件也能直接下载到电脑。已 root 的设备访问受保护目录时会自动通过 su 中转。'
+    missing: t('选中一台在线设备后，这里会出现「文件传输」按钮。'),
+    title: t('文件传输'),
+    body: t('左边选本机文件，右边选设备目录后上传；设备上的文件也能直接下载到电脑。已 root 的设备访问受保护目录时会自动通过 su 中转。')
   },
   {
     target: 'btn-apps',
     fallback: 'device-detail',
-    missing: '选中一台在线设备后，这里会出现「应用管理」按钮。',
-    title: '应用管理',
-    body: '扫描设备上的全部应用，按用户 / 系统 / 已停用分类搜索，批量卸载、停用、清除数据、导出 APK，误卸载的系统应用也能恢复。'
+    missing: t('选中一台在线设备后，这里会出现「应用管理」按钮。'),
+    title: t('应用管理'),
+    body: t('扫描设备上的全部应用，按用户 / 系统 / 已停用分类搜索，批量卸载、停用、清除数据、导出 APK，误卸载的系统应用也能恢复。')
   },
   {
     target: 'btn-screenshot',
     fallback: 'device-detail',
-    missing: '选中一台在线设备后，这里会出现「截图」按钮。',
-    title: '截图',
-    body: '按设备原始分辨率截图，保存到「图片/Cockpit」，同时复制到剪贴板，可以直接粘贴到聊天或文档里。'
+    missing: t('选中一台在线设备后，这里会出现「截图」按钮。'),
+    title: t('截图'),
+    body: t('按设备原始分辨率截图，先预览：可以直接保存、另存为，或用画笔、箭头、文字、马赛克标注后再保存。默认保存到「图片/Cockpit」，同时复制到剪贴板。')
   },
   {
     target: 'btn-trace',
     fallback: 'device-detail',
-    missing: '选中一台在线设备后，这里会出现「录制 Trace」按钮。',
-    title: '录制 Trace',
-    body: '用手机自带的 perfetto 录制系统 trace，提供卡顿、应用启动（自动冷启动）、内存、功耗四个预设。录完自动保存到「文稿/Cockpit/Traces」，并在内嵌的 Perfetto 里打开，直接缩放到录制的那一段。'
+    missing: t('选中一台在线设备后，这里会出现「录制 Trace」按钮。'),
+    title: t('录制 Trace'),
+    body: t('用手机自带的 perfetto 录制系统 trace，提供卡顿、应用启动（自动冷启动）、内存、功耗四个预设。录完自动保存到「文稿/Cockpit/Traces」，并在内嵌的 Perfetto 里打开，直接缩放到录制的那一段。')
   },
   {
     target: 'status',
-    title: '设备状态',
-    body: 'CPU、内存、温度、电池、网络、进程 Top 10 和存储每秒刷新，带 5 分钟曲线。连了多台设备时可以切到「对比」，把它们画在同一张图上。'
+    title: t('设备状态'),
+    body: t('CPU、内存、温度、电池、网络、进程 Top 10 和存储每秒刷新，带 5 分钟曲线。连了多台设备时可以切到「对比」，把它们画在同一张图上。')
   },
   {
     target: 'terminal-actions',
-    title: '终端',
-    body: '底部可以开多个 adb Shell、Logcat 和串口标签。输入时会提示命令、选项、设备上的包名和历史命令；把文件拖进终端会插入它的路径。'
+    title: t('终端'),
+    body: t('底部可以开多个 adb Shell、Logcat 和串口标签。输入时会提示命令、选项、设备上的包名和历史命令；把文件拖进终端会插入它的路径。Logcat 标签上方可以按级别、Tag、关键字或应用筛选，并导出日志。')
   },
   {
     target: 'perfetto',
-    title: 'Perfetto 查看器',
-    body: '点这里在中间区域打开内嵌的 Perfetto，它随应用一起打包，完全离线运行，trace 不会上传到任何地方。下面打开它看看。'
+    title: t('Perfetto 查看器'),
+    body: t('点这里在中间区域打开内嵌的 Perfetto，它随应用一起打包，完全离线运行，trace 不会上传到任何地方。下面打开它看看。')
   },
   {
     target: 'trace-view',
     trace: true,
-    title: '分析 trace',
-    body: '这里就是完整的 Perfetto 界面：时间线上看 CPU 调度、线程状态、帧时间线，左侧菜单里还有 SQL 查询和指标。点工具栏的「收起」会关闭它并释放内存。'
+    title: t('分析 trace'),
+    body: t('这里就是完整的 Perfetto 界面：时间线上看 CPU 调度、线程状态、帧时间线，左侧菜单里还有 SQL 查询和指标。点工具栏的「收起」会关闭它并释放内存。')
   },
   {
     target: 'trace-list',
     trace: true,
-    title: 'Trace 列表',
-    body: '录过的 trace 都在这里，可以重新打开、在 Finder 中显示或移到废纸篓。'
+    title: t('Trace 列表'),
+    body: t('录过的 trace 都在这里，可以重新打开、在 Finder 中显示或移到废纸篓。')
   },
   {
     target: 'trace-open',
     trace: true,
-    title: '打开本机 trace',
-    body: '也可以打开电脑上已有的 .pftrace、.perfetto-trace、systrace 或 JSON trace，比如同事发来的文件。'
+    title: t('打开本机 trace'),
+    body: t('也可以打开电脑上已有的 .pftrace、.perfetto-trace、systrace 或 JSON trace，比如同事发来的文件。')
   },
   {
     target: 'collapse-sidebar',
-    title: '收起区域',
-    body: `设备列表、设备信息和终端的标题栏右边都有这样的箭头，点一下收起成贴边的图标条，点图标条再展开。快捷键 ${paneShortcut('sidebar')} / ${paneShortcut('side')} / ${paneShortcut('terminal')}，${HIDE_ALL_SHORTCUT} 一键收起或展开全部。区域之间的边框可以拖动调整大小。`
+    title: t('收起区域'),
+    body: t(
+      '设备列表、设备信息和终端的标题栏右边都有这样的箭头，点一下收起成贴边的图标条，点图标条再展开。快捷键 {a} / {b} / {c}，{all} 一键收起或展开全部。区域之间的边框可以拖动调整大小。',
+      { a: paneShortcut('sidebar'), b: paneShortcut('side'), c: paneShortcut('terminal'), all: HIDE_ALL_SHORTCUT }
+    )
   },
   {
     target: 'theme',
-    title: '主题',
-    body: '白天、黑夜，或者跟随系统自动切换。'
+    title: t('主题'),
+    body: t('白天、黑夜，或者跟随系统自动切换。')
   },
   {
     target: 'settings',
-    title: '设置',
-    body: `调整整体字号、界面和终端字体、恢复默认布局，也能在这里重新打开本向导。${isMac ? '⌘' : 'Ctrl'} + = / − / 0 可以快速缩放界面。`
+    title: t('设置'),
+    body: t('调整整体字号、界面和终端字体、界面语言、恢复默认布局，也能在这里重新打开本向导。{key} + = / − / 0 可以快速缩放界面。', { key: isMac ? '⌘' : 'Ctrl' })
   }
 ]
 
@@ -215,8 +220,9 @@ export function GuideTour() {
   const [usingFallback, setUsingFallback] = useState(false)
   const [cardSize, setCardSize] = useState({ w: 340, h: 180 })
   const cardRef = useRef<HTMLDivElement>(null)
-  const step = STEPS[index]
-  const last = index === STEPS.length - 1
+  const steps = STEPS()
+  const step = steps[index]
+  const last = index === steps.length - 1
 
   // 记下进入向导前的布局，结束时恢复
   const saved = useRef<{ collapsed: CollapsedPanes; traceOpen: boolean } | null>(null)
@@ -287,35 +293,35 @@ export function GuideTour() {
   const mask = maskOf(shown)
 
   return (
-    <div className="tour" role="dialog" aria-modal="true" aria-label="使用向导">
+    <div className="tour" role="dialog" aria-modal="true" aria-label={t(t('使用向导'))}>
       <div className="tour-shade" style={mask ? { WebkitMaskImage: mask, maskImage: mask } : undefined} />
       {shown && <div className="tour-ring" style={{ left: shown.x, top: shown.y, width: shown.w, height: shown.h }} />}
       <div ref={cardRef} className={`tour-card${placement ? ` side-${placement.side}` : ''}`} style={cardStyle}>
         <div className="tour-step mono">
-          {index + 1} / {STEPS.length}
+          {index + 1} / {steps.length}
         </div>
         <h2 className="tour-title">{step.title}</h2>
         <p className="tour-text">{step.body}</p>
         {usingFallback && step.missing && <p className="tour-text tour-note">{step.missing}</p>}
         {step.target === 'device-list' && (
           <p className={`tour-status${deviceCount ? ' ok' : ''}`}>
-            {deviceCount ? `✓ 已检测到 ${deviceCount} 台在线设备` : '尚未检测到在线设备，连接后这里会自动更新'}
+            {deviceCount ? `✓ 已检测到 ${deviceCount} 台在线设备` : t('尚未检测到在线设备，连接后这里会自动更新')}
           </p>
         )}
         <div className="tour-actions">
           {!last && (
             <button className="link" onClick={finishGuide}>
-              跳过
+              {t(t('跳过'))}
             </button>
           )}
           <span className="spacer" />
           {index > 0 && (
             <button className="secondary" onClick={prev}>
-              上一步
+              {t(t('上一步'))}
             </button>
           )}
           <button className="primary" onClick={next}>
-            {last ? '开始使用' : '下一步'}
+            {last ? t('开始使用') : t('下一步')}
           </button>
         </div>
       </div>

@@ -10,6 +10,7 @@ import { AndroidKey, isInjectableText, metaStateOf, shouldSendAsKeycode, toAndro
 import type { WorkerInbound, WorkerOutbound } from './decoder.worker'
 import { droppedPaths, handleDeviceDrop, hasDraggedFiles } from '../files/fileStore'
 import { takeScreenshot } from '../apps/screenshot'
+import { t } from '../i18n'
 
 type ViewState = 'idle' | 'starting' | 'running' | 'error'
 interface Size {
@@ -96,7 +97,7 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
     } catch (err) {
       if (gen !== startGenRef.current) return
       const message = errorMessage(err)
-      notify('error', '投屏启动失败', message)
+      notify('error', t('投屏启动失败'), message)
       teardown('error', message)
     }
   }, [device.serial, multi, teardown])
@@ -115,7 +116,7 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
         if (event.sessionId !== sessionIdRef.current || event.type !== 'state') return
         if (event.state === 'stopped') teardown('idle')
         if (event.state === 'error') {
-          notify('error', '投屏中断', event.error)
+          notify('error', t('投屏中断'), event.error)
           teardown('error', event.error)
         }
       }),
@@ -161,7 +162,7 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
           break
         case 'error':
           console.warn('[mirror] decoder:', msg.message)
-          notify('warn', '画面解码出错，正在请求关键帧恢复', msg.message)
+          notify('warn', t('画面解码出错，正在请求关键帧恢复'), msg.message)
           break
         case 'end':
           break
@@ -179,7 +180,7 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
         imeRef.current?.focus()
       })
       .catch((err: Error) => {
-        notify('error', '投屏画面通道建立失败', err.message)
+        notify('error', t('投屏画面通道建立失败'), err.message)
         setError(err.message)
       })
 
@@ -320,7 +321,7 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
   useEffect(() => {
     if (state !== 'running' || videoSize) return
     const timer = setTimeout(
-      () => notify('warn', '投屏已连接，但 8 秒内没有收到画面', '设备可能处于息屏状态，可以点「电源」点亮屏幕；仍然没有画面时停止后重新投屏'),
+      () => notify('warn', t('投屏已连接，但 8 秒内没有收到画面'), '设备可能处于息屏状态，可以点「电源」点亮屏幕；仍然没有画面时停止后重新投屏'),
       NO_FRAME_TIMEOUT
     )
     return () => clearTimeout(timer)
@@ -356,7 +357,7 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
   }
 
   const running = state === 'running'
-  const keysDisabled = state === 'starting' ? STARTING_REASON : !running && '先点「开始投屏」，投屏后才能操作设备'
+  const keysDisabled = state === 'starting' ? STARTING_REASON() : !running && t('先点「开始投屏」，投屏后才能操作设备')
 
   return (
     <div
@@ -388,27 +389,27 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
         )}
         <span className="spacer" />
         <div className="mirror-keys">
-          <ToolButton label="返回" short="◁" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.BACK)} />
-          <ToolButton label="主页" short="○" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.HOME)} />
-          <ToolButton label="多任务" short="▢" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.APP_SWITCH)} />
-          <ToolButton label="音量+" short="音+" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.VOLUME_UP)} />
-          <ToolButton label="音量-" short="音−" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.VOLUME_DOWN)} />
-          <ToolButton label="电源" short="电源" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.POWER)} />
-          <ToolButton label="通知栏" short="通知" disabledReason={keysDisabled} onClick={() => send({ type: 'expandNotificationPanel' })} />
-          <ToolButton label="旋转" short="⟳" disabledReason={keysDisabled} onClick={() => send({ type: 'rotateDevice' })} />
-          <ToolButton label="截图" short="📷" onClick={() => void takeScreenshot(device)} />
+          <ToolButton label={t(t('返回'))} short="◁" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.BACK)} />
+          <ToolButton label={t(t('主页'))} short="○" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.HOME)} />
+          <ToolButton label={t(t('多任务'))} short="▢" disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.APP_SWITCH)} />
+          <ToolButton label={t(t('音量+'))} short={t(t('音+'))} disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.VOLUME_UP)} />
+          <ToolButton label={t(t('音量-'))} short={t(t('音−'))} disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.VOLUME_DOWN)} />
+          <ToolButton label={t(t('电源'))} short={t(t('电源'))} disabledReason={keysDisabled} onClick={() => pressKey(AndroidKey.POWER)} />
+          <ToolButton label={t(t('通知栏'))} short={t(t('通知'))} disabledReason={keysDisabled} onClick={() => send({ type: 'expandNotificationPanel' })} />
+          <ToolButton label={t(t('旋转'))} short="⟳" disabledReason={keysDisabled} onClick={() => send({ type: 'rotateDevice' })} />
+          <ToolButton label={t(t('截图'))} short="📷" onClick={() => void takeScreenshot(device)} />
         </div>
         {running || state === 'starting' ? (
-          <ActionButton className="secondary" onClick={stop} disabledReason={state === 'starting' && STARTING_REASON}>
-            停止
+          <ActionButton className="secondary" onClick={stop} disabledReason={state === 'starting' && STARTING_REASON()}>
+            {t(t('停止'))}
           </ActionButton>
         ) : (
           <button className="primary" onClick={() => void start()}>
-            <span className="label-full">开始投屏</span>
-            <span className="label-short">投屏</span>
+            <span className="label-full">{t('开始投屏')}</span>
+            <span className="label-short">{t('投屏')}</span>
           </button>
         )}
-        <button className="tool mirror-close" title="关闭窗格（同时停止投屏）" onClick={onClose}>
+        <button className="tool mirror-close" title={t(t('关闭窗格（同时停止投屏）'))} onClick={onClose}>
           ×
         </button>
       </div>
@@ -427,15 +428,18 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
             onContextMenu={(e) => e.preventDefault()}
           />
         )}
-        {state === 'starting' && <p className="mirror-hint">正在启动投屏…</p>}
-        {running && !videoSize && <p className="mirror-hint">等待画面…</p>}
-        {state === 'idle' && <p className="mirror-hint">点击「开始投屏」</p>}
-        {state === 'error' && <p className="mirror-hint error">投屏失败：{error}</p>}
-        {dropping && <p className="mirror-drop-hint">松开鼠标：APK 直接安装，其它文件选择目录后上传</p>}
+        {state === 'starting' && <p className="mirror-hint">{t('正在启动投屏…')}</p>}
+        {running && !videoSize && <p className="mirror-hint">{t('等待画面…')}</p>}
+        {state === 'idle' && <p className="mirror-hint">{t('点击「开始投屏」')}</p>}
+        {state === 'error' && <p className="mirror-hint error">
+            {t('投屏失败：')}
+            {error}
+          </p>}
+        {dropping && <p className="mirror-drop-hint">{t('松开鼠标：APK 直接安装，其它文件选择目录后上传')}</p>}
         <textarea
           ref={imeRef}
           className="mirror-ime"
-          aria-label="设备键盘输入"
+          aria-label={t(t('设备键盘输入'))}
           autoComplete="off"
           spellCheck={false}
           onKeyDown={onKeyDown}
@@ -449,7 +453,7 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
   )
 }
 
-const STARTING_REASON = '投屏正在启动，请稍候'
+const STARTING_REASON = () => t('投屏正在启动，请稍候')
 const NO_FRAME_TIMEOUT = 8_000
 
 interface ToolButtonProps {

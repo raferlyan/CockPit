@@ -6,26 +6,28 @@ import { useTerminalStore, type TerminalTab } from './terminalStore'
 import { TerminalView } from './TerminalView'
 import { SerialDialog } from './SerialDialog'
 import { CollapseButton } from '../settings/ToolStripe'
+import { LogcatFilterBar } from './LogcatFilterBar'
+import { t } from '../i18n'
 
-const LOGCAT_PLACEHOLDER = '可选参数，如 -s ActivityManager 或 --pid=$(pidof -s com.example)'
+const LOGCAT_PLACEHOLDER = () => t('可选启动参数，如 -b crash 或 -s ActivityManager；打开后还可在筛选栏里过滤')
 
 export function TerminalPanel() {
   const { tabs, activeId, open, openSerial, close, reopen, activate } = useTerminalStore()
   const devices = useAppStore((s) => s.devices)
   const focused = useAppStore((s) => s.devices.find((d) => d.serial === s.focusedSerial))
   const canOpen = focused?.state === 'device'
-  const noDeviceReason = !canOpen && (focused ? '当前设备不在线，无法打开 adb 终端' : '先在左侧选择一台在线设备')
+  const noDeviceReason = !canOpen && (focused ? t('当前设备不在线，无法打开 adb 终端') : t('先在左侧选择一台在线设备'))
   const [logcatArgs, setLogcatArgs] = useState<string | null>(null)
   const [serialOpen, setSerialOpen] = useState(false)
 
   const titleOf = (tab: TerminalTab) => {
-    if (tab.port) return `串口 ${tab.port.path.split(/[\\/]/).pop()} · ${tab.port.baudRate}`
+    if (tab.port) return `${t('串口')} ${tab.port.path.split(/[\\/]/).pop()} · ${tab.port.baudRate}`
     const device = devices.find((d) => d.serial === tab.serial)
     return `${device ? deviceTitle(device) : tab.serial} · ${tab.kind}`
   }
   const tooltipOf = (tab: TerminalTab) => {
     if (tab.port) return tab.port.path
-    return [`序列号 ${tab.serial}`, tab.logcatArgs && `logcat ${tab.logcatArgs}`].filter(Boolean).join('\n')
+    return [`${t('序列号')} ${tab.serial}`, tab.logcatArgs && `logcat ${tab.logcatArgs}`].filter(Boolean).join('\n')
   }
   const active = tabs.find((t) => t.id === activeId)
 
@@ -49,7 +51,7 @@ export function TerminalPanel() {
             {tab.kind === 'shell' && <IdentityMark tab={tab} />}
             <button
               className="terminal-tab-close"
-              title="关闭"
+              title={t('关闭')}
               onClick={(e) => {
                 e.stopPropagation()
                 close(tab.id)
@@ -72,15 +74,15 @@ export function TerminalPanel() {
               autoFocus
               className="mono"
               value={logcatArgs}
-              placeholder={LOGCAT_PLACEHOLDER}
+              placeholder={LOGCAT_PLACEHOLDER()}
               onChange={(e) => setLogcatArgs(e.target.value)}
               onKeyDown={(e) => e.key === 'Escape' && setLogcatArgs(null)}
             />
             <button type="submit" className="tool">
-              打开
+              {t('打开')}
             </button>
             <button type="button" className="tool" onClick={() => setLogcatArgs(null)}>
-              取消
+              {t('取消')}
             </button>
           </form>
         ) : (
@@ -92,12 +94,13 @@ export function TerminalPanel() {
               + Logcat
             </ActionButton>
             <button className="tool" onClick={() => setSerialOpen(true)}>
-              + 串口
+              + {t('串口')}
             </button>
           </span>
         )}
         <CollapseButton pane="terminal" />
       </div>
+      {active?.kind === 'logcat' && <LogcatFilterBar key={active.id} tab={active} />}
       <div className="terminal-body">
         {tabs.map((tab) => (
           <TerminalView key={tab.id} tab={tab} active={tab.id === activeId} />
@@ -105,13 +108,13 @@ export function TerminalPanel() {
         {tabs.length === 0 && (
           <div className="placeholder terminal-empty">
             {canOpen
-              ? '点击右上角「+ Shell」打开设备终端，或「+ 串口」连接调试串口；输入命令时会给出补全提示，可把文件拖进来插入其绝对路径'
-              : '选择一台在线设备后可打开 adb 终端；串口不需要设备在线'}
+              ? t('点击右上角「+ Shell」打开设备终端，或「+ 串口」连接调试串口；输入命令时会给出补全提示，可把文件拖进来插入其绝对路径')
+              : t('选择一台在线设备后可打开 adb 终端；串口不需要设备在线')}
           </div>
         )}
         {active?.exit && (
           <button className="secondary terminal-reopen" onClick={() => void reopen(active.id)}>
-            重新连接
+            {t('重新连接')}
           </button>
         )}
       </div>
@@ -132,11 +135,11 @@ export function TerminalPanel() {
 function IdentityMark({ tab }: { tab: TerminalTab }) {
   if (tab.exit || tab.identity === 'unknown') return null
   return tab.identity === 'root' ? (
-    <span className="identity root" title="当前为 root 身份">
+    <span className="identity root" title={t('当前为 root 身份')}>
       #
     </span>
   ) : (
-    <span className="identity" title="当前为普通用户">
+    <span className="identity" title={t('当前为普通用户')}>
       $
     </span>
   )

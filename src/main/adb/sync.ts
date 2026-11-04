@@ -13,17 +13,31 @@ function syncHeader(id: string, length: number): Buffer {
   return header
 }
 
+/** 设备这么久没有接收数据就认为卡死（如替换了正在运行的系统应用导致系统重启） */
+export const STALL_TIMEOUT = 30_000
+/** 数据发完后等设备落盘并应答的时间 */
+const REPLY_TIMEOUT = 2 * 60_000
+
 function write(socket: Socket, data: Buffer): Promise<void> {
   return new Promise((resolve, reject) => {
     if (socket.write(data)) return resolve()
-    const onDrain = () => {
+    const cleanup = () => {
+      clearTimeout(timer)
+      socket.off('drain', onDrain)
       socket.off('close', onClose)
+    }
+    const onDrain = () => {
+      cleanup()
       resolve()
     }
     const onClose = () => {
-      socket.off('drain', onDrain)
+      cleanup()
       reject(new Error('连接已关闭'))
     }
+    const timer = setTimeout(() => {
+      cleanup()
+      reject(new Error(`设备 ${STALL_TIMEOUT / 1000} 秒没有接收数据，传输已中止（设备可能已卡死或重启）`))
+    }, STALL_TIMEOUT)
     socket.once('drain', onDrain)
     socket.once('close', onClose)
   })
@@ -48,11 +62,16 @@ export async function syncPush(
   local: string,
   remote: string,
   onProgress: (sent: number, total: number) => void,
-  timeoutMs: number
+  timeoutMs: number,
+  signal?: AbortSignal
 ): Promise<void> {
+  signal?.throwIfAborted()
   const info = await stat(local)
   const socket = connect({ host: '127.0.0.1', port: serverPort })
   socket.setNoDelay(true)
+  // 取消时直接断开连接，正在等待的写入和应答都会立即失败
+  const onAbort = () => socket.destroy(new Error('已取消'))
+  signal?.addEventListener('abort', onAbort)
   const reader = new SocketReader(socket)
   const file = await open(local, 'r')
   try {
@@ -90,7 +109,13 @@ export async function syncPush(
     }
     if (!settled) socket.write(syncHeader('DONE', Math.floor(info.mtimeMs / 1000)))
 
-    const head = await reply
+    let replyTimer: NodeJS.Timeout | undefined
+    const head = await Promise.race([
+      reply,
+      new Promise<never>((_resolve, reject) => {
+        replyTimer = setTimeout(() => reject(new Error(`数据已发完，设备 ${REPLY_TIMEOUT / 1000} 秒内没有确认写入`)), REPLY_TIMEOUT)
+      })
+    ]).finally(() => clearTimeout(replyTimer))
     const id = head.toString('ascii', 0, 4)
     if (id === 'FAIL') {
       const length = head.readUInt32LE(4)
@@ -99,7 +124,11 @@ export async function syncPush(
     if (id !== 'OKAY') throw new Error(`sync 应答异常：${id}`)
     onProgress(info.size, info.size)
     socket.write(syncHeader('QUIT', 0))
+  } catch (error) {
+    if (signal?.aborted) throw new Error('已取消')
+    throw error
   } finally {
+    signal?.removeEventListener('abort', onAbort)
     await file.close()
     reader.detach()
     socket.destroy()

@@ -5,6 +5,7 @@ import { errorMessage, notify } from '../notify/notifyStore'
 import { useUiStore } from '../settings/uiStore'
 import { formatBytes } from '../metrics/format'
 import { openTraceFile, useTraceStore } from './traceStore'
+import { t } from '../i18n'
 
 /**
  * 内嵌的 Perfetto UI。页面由主进程在本机端口上提供，iframe 与 Cockpit 不同源，
@@ -37,7 +38,7 @@ export function TraceView() {
         setListOpen(false)
       }
     } catch (e) {
-      notify('error', '打开 trace 失败', errorMessage(e))
+      notify('error', t('打开 trace 失败'), errorMessage(e))
     }
   }
 
@@ -54,14 +55,14 @@ export function TraceView() {
           </span>
         )}
         <span className="spacer" />
-        <button className={`tool${listOpen ? ' on' : ''}`} data-tour="trace-list" title="录制和打开过的 trace" onClick={() => setListOpen(!listOpen)}>
-          Trace 列表
+        <button className={`tool${listOpen ? ' on' : ''}`} data-tour="trace-list" title={t(t('录制和打开过的 trace'))} onClick={() => setListOpen(!listOpen)}>
+          {t(t('Trace 列表'))}
         </button>
-        <button className="tool" data-tour="trace-open" title="选择本机的 .pftrace / .perfetto-trace / systrace 等文件" onClick={openFile}>
-          打开 trace…
+        <button className="tool" data-tour="trace-open" title={t(t('选择本机的 .pftrace / .perfetto-trace / systrace 等文件'))} onClick={openFile}>
+          {t(t('打开 trace…'))}
         </button>
-        <button className="tool" title="关闭 Perfetto，释放它占用的内存" onClick={() => setTraceOpen(false)}>
-          收起
+        <button className="tool" title={t(t('关闭 Perfetto，释放它占用的内存'))} onClick={() => setTraceOpen(false)}>
+          {t(t('收起'))}
         </button>
       </div>
       <div className="trace-body">
@@ -76,13 +77,13 @@ export function TraceView() {
         )}
         {error ? (
           <div className="trace-message">
-            <p>Perfetto UI 无法启动</p>
+            <p>{t('Perfetto UI 无法启动')}</p>
             <p className="mono muted">{error}</p>
           </div>
         ) : src ? (
           <iframe key={trace?.url ?? 'home'} className="trace-frame" src={src} title="Perfetto UI" allow="clipboard-read; clipboard-write" />
         ) : (
-          <div className="trace-message muted">正在启动 Perfetto…</div>
+          <div className="trace-message muted">{t('正在启动 Perfetto…')}</div>
         )}
       </div>
     </section>
@@ -115,7 +116,7 @@ function TraceList({ current, onOpen }: { current?: string; onOpen(file: TraceFi
       (list) => alive && setFiles(list),
       (e) => {
         if (alive) setFiles([])
-        notify('error', '读取 trace 列表失败', errorMessage(e))
+        notify('error', t('读取 trace 列表失败'), errorMessage(e))
       }
     )
     return () => {
@@ -124,27 +125,27 @@ function TraceList({ current, onOpen }: { current?: string; onOpen(file: TraceFi
   }, [version])
 
   const remove = async (file: TraceFile) => {
-    if (!window.confirm(`把 ${file.name} 移到废纸篓？`)) return
+    if (!window.confirm(t('把 {name} 移到废纸篓？', { name: file.name }))) return
     try {
       await api.trace.remove(file.path)
       useTraceStore.getState().bumpLibrary()
     } catch (e) {
-      notify('error', '删除失败', errorMessage(e))
+      notify('error', t('删除失败'), errorMessage(e))
     }
   }
 
   return (
     <aside className="trace-list">
       <div className="trace-list-head">
-        <span className="muted">录制的 trace</span>
-        <button className="link" onClick={() => void api.trace.openDir().catch((e) => notify('error', '打开目录失败', errorMessage(e)))}>
-          打开目录
+        <span className="muted">{t('录制的 trace')}</span>
+        <button className="link" onClick={() => void api.trace.openDir().catch((e) => notify('error', t('打开目录失败'), errorMessage(e)))}>
+          {t(t('打开目录'))}
         </button>
       </div>
       {files === null ? (
-        <p className="empty">读取中…</p>
+        <p className="empty">{t('读取中…')}</p>
       ) : files.length === 0 ? (
-        <p className="empty">还没有录制过。在右侧设备信息里点「录制 Trace」开始；也可以用「打开 trace…」查看本机已有的文件。</p>
+        <p className="empty">{t('还没有录制过。在右侧设备信息里点「录制 Trace」开始；也可以用「打开 trace…」查看本机已有的文件。')}</p>
       ) : (
         <ul>
           {files.map((file) => (
@@ -156,11 +157,11 @@ function TraceList({ current, onOpen }: { current?: string; onOpen(file: TraceFi
                 </span>
               </button>
               <span className="trace-list-actions">
-                <button className="tool" title="在 Finder / 资源管理器中显示" onClick={() => api.files.reveal(file.path)}>
-                  显示
+                <button className="tool" title={t(t('在 Finder / 资源管理器中显示'))} onClick={() => api.files.reveal(file.path)}>
+                  {t(t('显示'))}
                 </button>
-                <button className="tool" title="移到废纸篓" onClick={() => void remove(file)}>
-                  删除
+                <button className="tool" title={t(t('移到废纸篓'))} onClick={() => void remove(file)}>
+                  {t(t('删除'))}
                 </button>
               </span>
             </li>

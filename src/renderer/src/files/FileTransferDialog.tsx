@@ -7,6 +7,7 @@ import { ActionButton } from '../notify/ActionButton'
 import { errorMessage, notify } from '../notify/notifyStore'
 import { droppedPaths, hasDraggedFiles, useFileStore } from './fileStore'
 import { formatBytes, formatRate } from '../metrics/format'
+import { t } from '../i18n'
 
 const DIR_KEY = 'cockpit.transfer.dir'
 const DEFAULT_DIR = '/sdcard/Download'
@@ -60,6 +61,8 @@ export function FileTransferDialog() {
   const [log, setLog] = useState<LogItem[]>([])
   const [dropping, setDropping] = useState(false)
   const [progress, setProgress] = useState<(TransferProgress & { startedAt: number }) | null>(null)
+  /** 进行中的上传，可以取消 */
+  const [uploadId, setUploadId] = useState<string | null>(null)
 
   const browse = useCallback(
     async (target: string) => {
@@ -83,6 +86,15 @@ export function FileTransferDialog() {
     // 只在打开对话框、切换设备时读取一次
   }, [transfer.serial, online])
 
+  /** 随时可以关闭；正在上传时先确认，关闭即取消上传（主进程会中止传输，不会卡住） */
+  const requestClose = () => {
+    if (uploadId) {
+      if (!window.confirm(t('正在上传，关闭对话框会取消上传。确定关闭？'))) return
+      api.files.cancel(uploadId)
+    }
+    closeTransfer()
+  }
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !busy && closeTransfer()
     window.addEventListener('keydown', onKey)
@@ -93,7 +105,8 @@ export function FileTransferDialog() {
     const target = dirInput.trim() || dir
     const transferId = crypto.randomUUID()
     const startedAt = Date.now()
-    setBusy(`正在上传 ${transfer.files.length} 个文件…`)
+    setBusy(t('正在上传 {n} 个文件…', { n: transfer.files.length }))
+    setUploadId(transferId)
     const off = api.files.onProgress((event) => {
       if (event.transferId === transferId) setProgress({ ...event, startedAt })
     })
@@ -101,16 +114,19 @@ export function FileTransferDialog() {
       const results = await api.files.push(transfer.serial, transfer.files, target, transferId)
       setLog((l) => [...results.map((r) => ({ ...r, direction: 'push' as const })), ...l])
       const failed = results.filter((r) => !r.ok)
-      if (failed.length) notify('error', `${failed.length} 个文件上传失败`, failed[0].message)
-      else notify('success', `已上传 ${results.length} 个文件到 ${target}`)
+      const cancelled = failed.length > 0 && failed.every((r) => /已取消|Cancelled/.test(r.message))
+      if (cancelled) notify('info', t('已取消上传'))
+      else if (failed.length) notify('error', t('{n} 个文件上传失败', { n: failed.length }), failed[0].message)
+      else notify('success', t('已上传 {n} 个文件到 {dir}', { n: results.length, dir: target }))
       for (const r of results) if (r.ok) removeFile(r.source)
       void browse(target)
     } catch (error) {
-      notify('error', '上传失败', errorMessage(error))
+      notify('error', t('上传失败'), errorMessage(error))
     } finally {
       off()
       setProgress(null)
       setBusy(null)
+      setUploadId(null)
     }
   }
 
@@ -118,34 +134,36 @@ export function FileTransferDialog() {
     const localDir = await api.files.pickDirectory()
     if (!localDir) return
     const remote = joinRemote(dir, entry.name)
-    setBusy(`正在下载 ${entry.name}…`)
+    setBusy(t('正在下载 {name}…', { name: entry.name }))
     try {
       const result = await api.files.pull(transfer.serial, remote, localDir)
       setLog((l) => [{ ...result, direction: 'pull' }, ...l])
-      if (result.ok) notify('success', `已下载到 ${localDir}`)
-      else notify('error', '下载失败', result.message)
+      if (result.ok) notify('success', t('已下载到 {dir}', { dir: localDir }))
+      else notify('error', t('下载失败'), result.message)
     } finally {
       setBusy(null)
     }
   }
 
-  const offlineReason = !online && '设备不在线'
-  const uploadReason = offlineReason || (busy ?? false) || (transfer.files.length === 0 && '先拖入或选择要上传的文件')
+  const offlineReason = !online && t('设备不在线')
+  const uploadReason = offlineReason || (busy ?? false) || (transfer.files.length === 0 && t('先拖入或选择要上传的文件'))
   const title = device ? `${deviceTitle(device)}（${transfer.serial}）` : transfer.serial
 
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && closeTransfer()}>
-      <div className="dialog transfer-dialog" role="dialog" aria-label="文件传输">
+      <div className="dialog transfer-dialog" role="dialog" aria-label={t('文件传输')}>
         <div className="panel-title-row">
-          <h2 className="panel-title">文件传输 · {title}</h2>
-          <button className="tool" title="关闭" onClick={closeTransfer} disabled={Boolean(busy)}>
+          <h2 className="panel-title">
+            {t('文件传输')} · {title}
+          </h2>
+          <button className="tool" title={uploadId ? t('取消上传并关闭') : t('关闭')} onClick={requestClose}>
             ×
           </button>
         </div>
 
         <div className="transfer-columns">
           <section className="transfer-local">
-            <h3 className="status-heading">本机文件</h3>
+            <h3 className="status-heading">{t('本机文件')}</h3>
             <div
               className={`drop-zone${dropping ? ' dropping' : ''}`}
               onDragOver={(e) => {
@@ -161,7 +179,7 @@ export function FileTransferDialog() {
               }}
             >
               {transfer.files.length === 0 ? (
-                <p className="muted">把文件拖到这里，或</p>
+                <p className="muted">{t('把文件拖到这里，或')}</p>
               ) : (
                 <ul className="local-files">
                   {transfer.files.map((path) => (
@@ -169,7 +187,7 @@ export function FileTransferDialog() {
                       <span className="mono" title={path}>
                         {path}
                       </span>
-                      <button className="tool" title="移除" onClick={() => removeFile(path)}>
+                      <button className="tool" title={t('移除')} onClick={() => removeFile(path)}>
                         ×
                       </button>
                     </li>
@@ -177,13 +195,13 @@ export function FileTransferDialog() {
                 </ul>
               )}
               <button className="secondary" onClick={() => void api.files.pickLocal().then(addFiles)}>
-                选择文件…
+                {t('选择文件…')}
               </button>
             </div>
           </section>
 
           <section className="transfer-remote">
-            <h3 className="status-heading">设备目标目录</h3>
+            <h3 className="status-heading">{t('设备目标目录')}</h3>
             <form
               className="field-row"
               onSubmit={(e) => {
@@ -193,7 +211,7 @@ export function FileTransferDialog() {
             >
               <input className="mono" value={dirInput} onChange={(e) => setDirInput(e.target.value)} spellCheck={false} />
               <button type="submit" className="secondary">
-                前往
+                {t('前往')}
               </button>
             </form>
             <div className="dir-shortcuts">
@@ -207,13 +225,13 @@ export function FileTransferDialog() {
               {dir !== '/' && (
                 <li>
                   <button className="remote-entry" onClick={() => void browse(parentOf(dir))}>
-                    ↑ 上级目录
+                    ↑ {t('上级目录')}
                   </button>
                 </li>
               )}
               {listError && <li className="error">{listError}</li>}
-              {!listError && entries === null && online && <li className="muted">读取中…</li>}
-              {entries?.length === 0 && <li className="muted">空目录</li>}
+              {!listError && entries === null && online && <li className="muted">{t('读取中…')}</li>}
+              {entries?.length === 0 && <li className="muted">{t('空目录')}</li>}
               {entries?.map((entry) => (
                 <li key={entry.name}>
                   {entry.dir ? (
@@ -223,8 +241,8 @@ export function FileTransferDialog() {
                   ) : (
                     <span className="remote-entry file">📄 {entry.name}</span>
                   )}
-                  <ActionButton className="tool" disabledReason={busy} title="下载到本机目录" onClick={() => void download(entry)}>
-                    下载
+                  <ActionButton className="tool" disabledReason={busy} title={t('下载到本机目录')} onClick={() => void download(entry)}>
+                    {t('下载')}
                   </ActionButton>
                 </li>
               ))}
@@ -237,8 +255,13 @@ export function FileTransferDialog() {
         <div className="dialog-actions">
           {busy && !progress && <span className="muted">{busy}</span>}
           <span className="spacer" />
+          {uploadId && (
+            <button className="secondary danger" onClick={() => api.files.cancel(uploadId)}>
+              {t('取消上传')}
+            </button>
+          )}
           <ActionButton className="primary" disabledReason={uploadReason} onClick={() => void upload()}>
-            {transfer.files.length ? `上传 ${transfer.files.length} 个文件到 ` : '上传到 '}
+            {transfer.files.length ? t('上传 {n} 个文件到 {dir}', { n: transfer.files.length, dir: '' }) : t('上传到 {dir}', { dir: '' })}
             {dirInput.trim() || dir}
           </ActionButton>
         </div>
@@ -253,7 +276,7 @@ export function FileTransferDialog() {
                 </span>
                 {item.ok && item.direction === 'pull' && (
                   <button className="link" onClick={() => api.files.reveal(item.target)}>
-                    打开所在目录
+                    {t('打开所在目录')}
                   </button>
                 )}
                 {!item.ok && <span className="muted">{item.message}</span>}
@@ -284,7 +307,7 @@ function UploadProgress({ progress }: { progress: TransferProgress & { startedAt
         <span className="mono">
           {percent.toFixed(0)}% · {formatBytes(progress.sent)} / {formatBytes(progress.total)}
           {speed > 0 && ` · ${formatRate(speed)}`}
-          {speed > 0 && remaining >= 1 && ` · 剩余 ${formatDuration(remaining)}`}
+          {speed > 0 && remaining >= 1 && ` · ${t('剩余 {time}', { time: formatDuration(remaining) })}`}
         </span>
       </div>
       <div className="bar">
@@ -295,7 +318,7 @@ function UploadProgress({ progress }: { progress: TransferProgress & { startedAt
 }
 
 function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${Math.ceil(seconds)} 秒`
+  if (seconds < 60) return t('{s} 秒', { s: Math.ceil(seconds) })
   const minutes = Math.floor(seconds / 60)
-  return `${minutes} 分 ${Math.ceil(seconds % 60)} 秒`
+  return t('{m} 分 {s} 秒', { m: minutes, s: Math.ceil(seconds % 60) })
 }
