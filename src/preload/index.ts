@@ -99,6 +99,11 @@ const api: CockpitApi = {
     pickTool: () => ipcRenderer.invoke(IpcChannel.RootPickTool),
     testTool: (config, challenge) => ipcRenderer.invoke(IpcChannel.RootTestTool, config, challenge)
   },
+  oplog: {
+    list: () => ipcRenderer.invoke(IpcChannel.OplogList),
+    clear: () => ipcRenderer.invoke(IpcChannel.OplogClear),
+    onEvent: (listener) => subscribe(IpcChannel.OplogEvent, listener)
+  },
   clipboard: {
     readText: () => ipcRenderer.invoke(IpcChannel.ClipboardRead),
     writeText: (text) => ipcRenderer.send(IpcChannel.ClipboardWrite, text)

@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/raferlyan/CockPit/releases/latest"><b>Download</b></a> ·
+  <a href="docs/manual/Cockpit产品使用说明书.pdf">Illustrated manual (Chinese, PDF)</a> ·
   <a href="docs/USER_GUIDE.md">User guide (Chinese)</a> ·
   <a href="docs/demo.html">Web demo (Chinese)</a> ·
   <a href="README.md">中文</a> | <b>English</b>

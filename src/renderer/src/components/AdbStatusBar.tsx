@@ -2,6 +2,7 @@ import { useAppStore } from '../store'
 import { ThemeSwitch } from '../theme/ThemeSwitch'
 import { useUiStore } from '../settings/uiStore'
 import { t } from '../i18n'
+import { useOplogStore } from '../oplog/oplogStore'
 
 function SettingsButton() {
   return (
@@ -25,6 +26,22 @@ function PerfettoButton() {
   )
 }
 
+function OplogButton() {
+  const open = useUiStore((s) => s.oplogOpen)
+  const unseen = useOplogStore((s) => s.unseen)
+  return (
+    <button
+      className={`statusbar-button${open ? ' on' : ''}`}
+      data-tour="oplog"
+      title={t('查看每次操作执行的 adb 命令，可以复制使用')}
+      onClick={() => useUiStore.getState().setOplogOpen(!open)}
+    >
+      {t('操作日志')}
+      {unseen > 0 && !open && <span className="statusbar-badge">{unseen > 99 ? '99+' : unseen}</span>}
+    </button>
+  )
+}
+
 export function AdbStatusBar() {
   const status = useAppStore((s) => s.adbStatus)
   const onlineCount = useAppStore((s) => s.devices.filter((d) => d.state === 'device').length)
@@ -34,6 +51,7 @@ export function AdbStatusBar() {
       <footer className="statusbar">
         {t('正在连接 adb…')}
         <span className="spacer" />
+        <OplogButton />
         <PerfettoButton />
         <ThemeSwitch />
         <SettingsButton />
@@ -51,6 +69,7 @@ export function AdbStatusBar() {
       )}
       <span className="spacer" />
       <span>{t('{n} 台在线', { n: onlineCount })}</span>
+      <OplogButton />
       <PerfettoButton />
       <ThemeSwitch />
       <SettingsButton />

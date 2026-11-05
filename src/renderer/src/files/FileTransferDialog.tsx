@@ -35,6 +35,17 @@ function parentOf(dir: string): string {
   return index <= 0 ? '/' : trimmed.slice(0, index)
 }
 
+/** 本机路径的文件名和所在目录，Windows 和 POSIX 分隔符都认 */
+function baseName(path: string): string {
+  return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path
+}
+
+function dirName(path: string): string {
+  const trimmed = path.replace(/[\\/]+$/, '')
+  const index = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'))
+  return index > 0 ? trimmed.slice(0, index) : ''
+}
+
 function joinRemote(dir: string, name: string): string {
   return `${dir.replace(/\/+$/, '')}/${name}`
 }
@@ -214,9 +225,13 @@ export function FileTransferDialog() {
               ) : (
                 <ul className="local-files">
                   {transfer.files.map((path) => (
-                    <li key={path}>
-                      <span className="mono" title={path}>
-                        {path}
+                    <li key={path} title={path}>
+                      <span className="local-file-text">
+                        <span className="local-file-name mono">{baseName(path)}</span>
+                        {/* 目录太长时省略开头；bdi 隔离文字方向，斜杠不会跑到末尾 */}
+                        <span className="local-file-dir mono">
+                          <bdi dir="ltr">{dirName(path)}</bdi>
+                        </span>
                       </span>
                       <button className="tool" title={t('移除')} onClick={() => removeFile(path)}>
                         ×

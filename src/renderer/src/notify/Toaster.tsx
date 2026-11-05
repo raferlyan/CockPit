@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { api } from '../api'
 import { errorMessage, notify, useNotifyStore } from './notifyStore'
 import { t as tr } from '../i18n'
+import { Exit } from '../motion/Exit'
 
 const ICON = { info: 'i', success: '✓', warn: '!', error: '×' }
 
@@ -9,19 +10,22 @@ export function Toaster() {
   const { toasts, dismiss } = useNotifyStore()
   return (
     <div className="toaster" role="status" aria-live="polite">
+      {/* Exit：关闭时收起高度并淡出，下面的通知平滑补上 */}
       {toasts.map((t) => (
-        <div key={t.id} className={`toast toast-${t.level}`}>
-          <span className="toast-icon" aria-hidden>
-            {ICON[t.level]}
-          </span>
-          <div className="toast-text">
-            <div className="toast-title">{t.title}</div>
-            {t.detail && <div className="toast-detail">{t.detail}</div>}
+        <Exit key={t.id}>
+          <div className={`toast toast-${t.level}`}>
+            <span className="toast-icon" aria-hidden>
+              {ICON[t.level]}
+            </span>
+            <div className="toast-text">
+              <div className="toast-title">{t.title}</div>
+              {t.detail && <div className="toast-detail">{t.detail}</div>}
+            </div>
+            <button className="toast-close" title={tr('关闭')} onClick={() => dismiss(t.id)}>
+              ×
+            </button>
           </div>
-          <button className="toast-close" title={tr('关闭')} onClick={() => dismiss(t.id)}>
-            ×
-          </button>
-        </div>
+        </Exit>
       ))}
     </div>
   )

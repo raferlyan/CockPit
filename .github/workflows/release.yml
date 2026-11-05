@@ -16,7 +16,10 @@ jobs:
         include:
           - os: macos-latest
             dist: dist:mac
-            files: release/*.dmg
+            # 产品使用说明书随 macOS 任务一起上传，避免重复
+            files: |
+              release/*.dmg
+              release/*.pdf
           - os: windows-latest
             dist: dist:win
             files: release/*.exe
@@ -43,6 +46,10 @@ jobs:
         env:
           # 没有签名证书，跳过自动查找
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      # Release 附件名不支持中文，复制成英文名再上传
+      - if: runner.os == 'macOS'
+        run: cp "docs/manual/Cockpit产品使用说明书.pdf" "release/Cockpit-${{ github.ref_name }}-manual-zh-CN.pdf"
 
       - uses: softprops/action-gh-release@v2
         with:

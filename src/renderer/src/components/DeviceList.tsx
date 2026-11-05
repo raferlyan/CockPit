@@ -8,6 +8,7 @@ import { deviceTitle, STATE_LABEL } from '../labels'
 import { RootBadge } from './RootBadge'
 import { CollapseButton } from '../settings/ToolStripe'
 import { DeviceContextMenu } from '../root/DeviceContextMenu'
+import { Exit } from '../motion/Exit'
 import { t } from '../i18n'
 
 export function DeviceList() {
@@ -44,7 +45,11 @@ export function DeviceList() {
       </ul>
 
       <ConnectForm />
-      {menu && menuDevice && <DeviceContextMenu device={menuDevice} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
+      {menu && menuDevice && (
+        <Exit key={`${menu.x},${menu.y}`}>
+          <DeviceContextMenu device={menuDevice} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />
+        </Exit>
+      )}
     </aside>
   )
 }

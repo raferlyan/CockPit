@@ -18,6 +18,7 @@ import { TraceLibrary } from './trace/TraceLibrary'
 import { TraceRecorder } from './trace/TraceRecorder'
 import { RootService } from './root/RootService'
 import { RootSettingsStore } from './root/RootSettingsStore'
+import { OperationLog } from './oplog/OperationLog'
 import { safeStorage } from 'electron'
 
 let deviceManager: DeviceManager | undefined
@@ -73,6 +74,7 @@ function createWindow(): void {
 async function bootstrap(): Promise<void> {
   const adbPath = await resolveAdbPath({ bundledDir: app.isPackaged ? process.resourcesPath : undefined })
   let adb: AdbClient | undefined
+  const oplog = new OperationLog((event) => broadcast(IpcChannel.OplogEvent, event))
   const rootSettings = new RootSettingsStore(join(app.getPath('userData'), 'root-settings.json'), {
     available: () => safeStorage.isEncryptionAvailable(),
     encrypt: (text) => safeStorage.encryptString(text).toString('base64'),
@@ -133,6 +135,7 @@ async function bootstrap(): Promise<void> {
     recorder,
     root: rootService,
     rootSettings,
+    oplog,
     fallbackStatus
   })
   createWindow()

@@ -5,6 +5,7 @@ import '@xterm/xterm/css/xterm.css'
 import '@fontsource/cascadia-mono/400.css'
 import '@fontsource/cascadia-mono/700.css'
 import { api } from '../api'
+import { Exit } from '../motion/Exit'
 import { droppedPaths, hasDraggedFiles } from '../files/fileStore'
 import { listenTerminal, type TerminalTab } from './terminalStore'
 import { compileFilter, DEFAULT_FILTER, logcatBuffer, renderLine, type CompiledFilter } from './logcat'
@@ -382,21 +383,23 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
         </div>
       )}
       {menu && (
-        <div className="context-menu" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
-          <button disabled={!menu.hasSelection} onClick={() => runMenu(() => void copySelection())}>
-            {t('复制')}
-            <kbd>{isMac ? '⌘C' : 'Ctrl+C'}</kbd>
-          </button>
-          <button disabled={!interactive} onClick={() => runMenu(paste)}>
-            {t('粘贴')}
-            <kbd>{isMac ? '⌘V' : 'Ctrl+V'}</kbd>
-          </button>
-          <button onClick={() => runMenu(() => termRef.current?.term.selectAll())}>
-            {t('全选')}
-            <kbd>{isMac ? '⌘A' : ''}</kbd>
-          </button>
-          <button onClick={() => runMenu(() => termRef.current?.term.clear())}>{t('清屏')}</button>
-        </div>
+        <Exit key={`${menu.x},${menu.y}`}>
+          <div className="context-menu" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
+            <button disabled={!menu.hasSelection} onClick={() => runMenu(() => void copySelection())}>
+              {t('复制')}
+              <kbd>{isMac ? '⌘C' : 'Ctrl+C'}</kbd>
+            </button>
+            <button disabled={!interactive} onClick={() => runMenu(paste)}>
+              {t('粘贴')}
+              <kbd>{isMac ? '⌘V' : 'Ctrl+V'}</kbd>
+            </button>
+            <button onClick={() => runMenu(() => termRef.current?.term.selectAll())}>
+              {t('全选')}
+              <kbd>{isMac ? '⌘A' : ''}</kbd>
+            </button>
+            <button onClick={() => runMenu(() => termRef.current?.term.clear())}>{t('清屏')}</button>
+          </div>
+        </Exit>
       )}
       {dropping && <div className="terminal-drop-hint">{t('松开鼠标，插入文件的绝对路径')}</div>}
     </div>

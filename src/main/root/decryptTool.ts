@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import type { DecryptToolConfig } from '@shared/root'
+import { formatCommand, recordCommand } from '../oplog/OperationLog'
 
 const TOOL_TIMEOUT = 20_000
 
@@ -29,6 +30,7 @@ export function runDecryptTool(config: DecryptToolConfig, challenge: string): Pr
   if (!config.toolArgs.includes('{challenge}') && !config.toolStdin) args = [...args, challenge]
   // .bat / .cmd 要经过 cmd.exe 才能运行
   const viaShell = process.platform === 'win32' && /\.(bat|cmd)$/i.test(toolPath)
+  recordCommand(formatCommand(toolPath, args), config.toolStdin ? '本机解密工具，挑战码同时写入标准输入' : '本机解密工具')
   return new Promise((resolve, reject) => {
     const child = execFile(
       toolPath,

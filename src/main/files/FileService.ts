@@ -57,7 +57,7 @@ export class FileService {
   async list(serial: string, dir: string): Promise<RemoteEntry[]> {
     const command = listCommand(dir)
     try {
-      return parseLsOutput(await this.adb.shell(serial, command, { timeout: 15_000 }))
+      return parseLsOutput(await this.adb.shell(serial, command, { timeout: 15_000, note: '列出目录内容' }))
     } catch (error) {
       if (/No such file or directory/i.test((error as Error).message)) throw new Error(`目录不存在：${dir}`)
       if (/Not a directory/i.test((error as Error).message)) throw new Error(`不是目录：${dir}`)
@@ -102,7 +102,9 @@ export class FileService {
     let remountPoint: string | undefined
     let viaRoot = false
     try {
-      const probe = parseTargetProbe(await this.adb.shell(serial, targetProbeCommand(remoteDir), { timeout: PROBE_TIMEOUT, signal }))
+      const probe = parseTargetProbe(
+        await this.adb.shell(serial, targetProbeCommand(remoteDir), { timeout: PROBE_TIMEOUT, signal, note: '上传前检查：目录能否写入、所在分区是否只读、adbd 身份' })
+      )
       if (!probe.writable) {
         emit('root')
         const access = await this.rootAccess(serial, signal)
@@ -173,7 +175,7 @@ export class FileService {
     const command = diskUsageCommand(dir)
     const out = asRoot
       ? await this.asRoot(serial, command, new Error(`${dir}: Permission denied`), DU_TIMEOUT)
-      : await this.adb.shell(serial, command, { timeout: DU_TIMEOUT })
+      : await this.adb.shell(serial, command, { timeout: DU_TIMEOUT, note: '统计各子项占用' })
     return parseDiskUsage(dir, out, asRoot)
   }
 
@@ -217,7 +219,7 @@ export class FileService {
       } catch (error) {
         // 取消或中途断开时设备上会留下写了一半的文件，删掉；权限错误时文件根本没建出来，不用管
         if (!isPermissionError((error as Error).message)) {
-          await this.adb.shell(serial, `rm -f ${shellQuote(target)}`, { timeout: 10_000 }).catch(() => undefined)
+          await this.adb.shell(serial, `rm -f ${shellQuote(target)}`, { timeout: 10_000, note: '删除传了一半的文件' }).catch(() => undefined)
         }
         throw error
       }
@@ -265,7 +267,7 @@ export class FileService {
         throw error
       })
     } finally {
-      await this.adb.shell(serial, `rm -rf ${shellQuote(staging)}`).catch(() => undefined)
+      await this.adb.shell(serial, `rm -rf ${shellQuote(staging)}`, { note: '清理临时文件' }).catch(() => undefined)
     }
   }
 
@@ -293,7 +295,7 @@ export class FileService {
       return this.rootChannel(serial)!.exec(command, timeout)
     }
     const wrapped = access === 'adbd' ? command : access === 'dash-c' ? `su -c ${shellQuote(command)}` : `su 0 sh -c ${shellQuote(command)}`
-    return this.adb.shell(serial, wrapped, { timeout, signal })
+    return this.adb.shell(serial, wrapped, { timeout, signal, note: access === 'adbd' ? undefined : '以 root 执行' })
   }
 
   /** 探测一次怎样拿 root 并缓存；拿不到的结果不缓存，用户在设备上授权或 adb root 后可以重试 */
@@ -302,9 +304,10 @@ export class FileService {
     let cached = this.rootAccesses.get(serial)
     if (!cached) {
       cached = (async (): Promise<RootAccess> => {
-        const uid = await this.adb.shell(serial, 'id -u', { signal }).catch(() => '')
+        const uid = await this.adb.shell(serial, 'id -u', { signal, note: '检查 adbd 是否为 root' }).catch(() => '')
         if (uid.trim() === '0') return 'adbd'
-        const probe = async (cmd: string) => /uid=0\b/.test(await this.adb.shell(serial, cmd, { timeout: PROBE_TIMEOUT, signal }).catch(() => ''))
+        const probe = async (cmd: string) =>
+          /uid=0\b/.test(await this.adb.shell(serial, cmd, { timeout: PROBE_TIMEOUT, signal, note: '检查能否免密 su' }).catch(() => ''))
         if (await probe('su -c id')) return 'dash-c'
         if (await probe('su 0 id')) return 'uid'
         return 'none'

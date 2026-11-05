@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { stripAnsi } from '../shell/prompt'
 import type { PtyLike } from './suDriver'
+import { recordCommand } from '../oplog/OperationLog'
 
 interface Job {
   command: string
@@ -34,11 +35,13 @@ export class RootSession {
    * 紧跟着发的命令会丢；回显的命令行里没有连在一起的标记，不影响解析。
    */
   async init(): Promise<void> {
-    await this.exec('true', 10_000)
+    await this.exec('true', 10_000, false)
   }
 
-  exec(command: string, timeout = 60_000): Promise<string> {
+  /** record 为 false 时不记进操作日志（内部探测用） */
+  exec(command: string, timeout = 60_000, record = true): Promise<string> {
     if (this.closed) return Promise.reject(new Error('root 会话已结束，请重新进入 root'))
+    if (record) recordCommand(command, 'root 会话中执行')
     return new Promise((resolve, reject) => {
       this.queue.push({ command, timeout, resolve, reject })
       void this.next()

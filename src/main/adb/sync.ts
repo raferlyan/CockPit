@@ -2,6 +2,7 @@ import { open, stat } from 'node:fs/promises'
 import { connect, type Socket } from 'node:net'
 import { SocketReader } from '../util/SocketReader'
 import { encodeRequest } from './protocol'
+import { formatCommand, recordCommand } from '../oplog/OperationLog'
 
 /** adbd 单个 DATA 包的上限 */
 const CHUNK_SIZE = 64 * 1024
@@ -66,6 +67,7 @@ export async function syncPush(
   signal?: AbortSignal
 ): Promise<void> {
   signal?.throwIfAborted()
+  recordCommand(formatCommand('adb', ['-s', serial, 'push', local, remote]), '经 adb sync 协议传输，效果等同')
   const info = await stat(local)
   const socket = connect({ host: '127.0.0.1', port: serverPort })
   socket.setNoDelay(true)

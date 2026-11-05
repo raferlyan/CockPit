@@ -91,6 +91,11 @@ const STEPS = (): TourStep[] => [
     body: t('底部可以开多个 adb Shell、Logcat、本机终端和串口标签。本机终端在 Windows 上是 PowerShell，可以直接敲 adb。Shell 里输入时会提示命令、选项、设备上的包名和历史命令；把文件拖进终端会插入它的路径。Logcat 标签上方可以按级别、Tag、关键字或应用筛选，并导出日志。')
   },
   {
+    target: 'oplog',
+    title: t('操作日志'),
+    body: t('每次上传文件、进入 root、截图、安装应用等操作，执行了哪些 adb 命令都记在这里。命令可以逐条或整条复制，粘贴到终端里直接执行，也方便写进文档或脚本。')
+  },
+  {
     target: 'perfetto',
     title: t('Perfetto 查看器'),
     body: t('点这里在中间区域打开内嵌的 Perfetto，它随应用一起打包，完全离线运行，trace 不会上传到任何地方。下面打开它看看。')

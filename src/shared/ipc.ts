@@ -8,6 +8,7 @@ import type { AppAction, AppPackage, InstallResult } from './apps'
 import type { ThemeMode } from './theme'
 import type { TraceFile, TraceRecordEvent, TraceRecordOptions, TraceSource } from './trace'
 import type { DecryptToolConfig, RootMethod, RootSettings, RootSettingsUpdate } from './root'
+import type { OpEntry, OpLogEvent } from './oplog'
 
 /** 所有 IPC 通道名集中定义，主进程与 preload 共用 */
 export const IpcChannel = {
@@ -53,6 +54,10 @@ export const IpcChannel = {
   RootExit: 'root:exit',
   RootPickTool: 'root:pickTool',
   RootTestTool: 'root:testTool',
+  OplogList: 'oplog:list',
+  OplogClear: 'oplog:clear',
+  /** 主进程 → 渲染进程，操作日志新增或更新 */
+  OplogEvent: 'oplog:event',
   AppsPids: 'apps:pids',
   DeviceSaveImage: 'device:saveImage',
   AppSetLanguage: 'app:setLanguage',
@@ -212,6 +217,11 @@ export interface CockpitApi {
     pickTool(): Promise<string | null>
     /** 用一个挑战码试运行解密工具，返回它算出的密码 */
     testTool(config: DecryptToolConfig, challenge: string): Promise<string>
+  }
+  oplog: {
+    list(): Promise<OpEntry[]>
+    clear(): Promise<void>
+    onEvent(listener: (event: OpLogEvent) => void): () => void
   }
   /** 走主进程的系统剪贴板，不受页面焦点和权限限制 */
   clipboard: {

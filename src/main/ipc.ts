@@ -25,6 +25,8 @@ import { setLanguage, tm, translateError } from './i18n'
 import type { RootService } from './root/RootService'
 import type { RootSettingsStore } from './root/RootSettingsStore'
 import { runDecryptTool } from './root/decryptTool'
+import type { OperationLog } from './oplog/OperationLog'
+import { failureOf, OPERATIONS } from './oplog/operations'
 import type { DecryptToolConfig, RootMethod, RootSettingsUpdate } from '@shared/root'
 
 export function broadcast(channel: string, payload: unknown): void {
@@ -52,9 +54,10 @@ export function registerIpc(ctx: {
   recorder?: TraceRecorder
   root?: RootService
   rootSettings: RootSettingsStore
+  oplog: OperationLog
   fallbackStatus: AdbStatus
 }): void {
-  const { adb, deviceManager, mirror, shell, metrics, files, apps, serial, perfetto, traces, recorder, root, rootSettings } = ctx
+  const { adb, deviceManager, mirror, shell, metrics, files, apps, serial, perfetto, traces, recorder, root, rootSettings, oplog } = ctx
   const requireRoot = () => {
     if (!root) throw new Error('未找到 adb')
     return root
@@ -70,11 +73,18 @@ export function registerIpc(ctx: {
   /** 进行中的上传，可取消；设备断开时自动取消 */
   const transfers = new Map<string, { serial: string; controller: AbortController }>()
 
-  // 所有 invoke 的错误信息都跟随界面语言
+  // 所有 invoke 的错误信息都跟随界面语言；用户操作记进操作日志，连同期间执行的命令
   const handle = <A extends unknown[]>(channel: string, listener: (event: IpcMainInvokeEvent, ...args: A) => unknown) =>
     ipcMain.handle(channel, async (event, ...args) => {
+      const describe = OPERATIONS[channel] as ((...a: unknown[]) => ReturnType<NonNullable<(typeof OPERATIONS)[string]>>) | undefined
       try {
-        return await listener(event, ...(args as A))
+        if (!describe) return await listener(event, ...(args as A))
+        return await oplog.run(describe(...args), async () => {
+          const result = await listener(event, ...(args as A))
+          const failure = failureOf(result)
+          if (failure) oplog.fail(failure)
+          return result
+        })
       } catch (error) {
         if (error instanceof Error) error.message = translateError(error.message)
         throw error
@@ -143,6 +153,8 @@ export function registerIpc(ctx: {
   })
   ipcMain.on(IpcChannel.FilesCancel, (_e, transferId: string) => transfers.get(transferId)?.controller.abort())
   handle(IpcChannel.FilesDiskUsage, (_e, serial: string, dir: string, asRoot: boolean) => requireFiles().diskUsage(serial, String(dir), Boolean(asRoot)))
+  handle(IpcChannel.OplogList, () => oplog.list())
+  handle(IpcChannel.OplogClear, () => oplog.clear())
   handle(IpcChannel.FilesRemount, (_e, serial: string, mountPoint: string) => requireFiles().remount(serial, String(mountPoint)))
   handle(IpcChannel.RootSettingsGet, () => rootSettings.get())
   handle(IpcChannel.RootSettingsSet, (_e, patch: RootSettingsUpdate) => rootSettings.update(patch ?? {}))

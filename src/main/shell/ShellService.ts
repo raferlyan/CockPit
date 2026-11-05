@@ -10,6 +10,7 @@ import { detectIdentity } from './prompt'
 import { watchOwner } from '../util/ownerLifetime'
 import type { PtyLike } from '../root/suDriver'
 import { translateError } from '../i18n'
+import { formatCommand, recordCommand } from '../oplog/OperationLog'
 
 /** 打开 root 终端时用到的 RootService 能力 */
 export interface RootTerminalHooks {
@@ -68,6 +69,7 @@ export class ShellService {
       }
       // adb root 方式要在开 shell 之前重启 adbd
       if (options.kind === 'shell' && options.root && this.rootHooks) drive = (await this.rootHooks.prepareTerminal(serial)) === 'drive'
+      recordCommand(formatCommand('adb', args))
       proc = pty.spawn(this.adbPath, args, {
         name: 'xterm-256color',
         ...size,
@@ -189,6 +191,7 @@ function spawnLocal(adbPath: string | null, size: { cols: number; rows: number }
   if (adbPath) env[pathKey] = [dirname(adbPath), env[pathKey]].filter(Boolean).join(delimiter)
   const [file, args] =
     process.platform === 'win32' ? ['powershell.exe', ['-NoLogo']] : [process.env.SHELL || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash'), ['-l']]
+  recordCommand(formatCommand(file, args), '本机终端')
   return pty.spawn(file, args, { name: 'xterm-256color', ...size, cwd: homedir(), env: { ...env, TERM: 'xterm-256color' } })
 }
 

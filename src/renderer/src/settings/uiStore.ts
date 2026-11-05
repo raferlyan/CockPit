@@ -25,6 +25,9 @@ interface UiState {
   trace: TraceSource | null
   /** root 方式设置对话框；serial 为从设备右键打开时的设备 */
   rootSettings: { serial: string | null } | null
+  /** 操作日志面板 */
+  oplogOpen: boolean
+  setOplogOpen(open: boolean): void
   setSettingsOpen(open: boolean): void
   setGuideOpen(open: boolean): void
   /** 看完或跳过向导，之后不再自动弹出 */
@@ -45,6 +48,8 @@ export const useUiStore = create<UiState>((set) => ({
   traceOpen: false,
   trace: null,
   rootSettings: null,
+  oplogOpen: false,
+  setOplogOpen: (oplogOpen) => set({ oplogOpen }),
   openRootSettings: (serial) => set({ rootSettings: { serial } }),
   closeRootSettings: () => set({ rootSettings: null }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),

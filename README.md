@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/raferlyan/CockPit/releases/latest"><b>下载最新版</b></a> ·
+  <a href="docs/manual/Cockpit产品使用说明书.pdf">产品使用说明书（PDF）</a> ·
   <a href="docs/USER_GUIDE.md">使用说明</a> ·
   <a href="docs/demo.html">网页演示</a> ·
   <b>中文</b> | <a href="README.en.md">English</a>
@@ -116,7 +117,7 @@ Shell、Logcat、串口在同一个终端区，多标签。标签上显示设备
    - **Windows**：SmartScreen 提示时点「更多信息」→「仍要运行」。
 3. **连设备**：手机打开「开发者选项 → USB 调试」，连接后在手机上允许调试授权，左侧出现绿点即在线。无线调试在左下角输入 `IP:端口` 点「连接」。
 
-使用串口时，电脑需要装好 USB 转串口芯片（CH340、CP210x、FTDI 等）的驱动。完整操作说明见 [使用说明](docs/USER_GUIDE.md)。
+使用串口时，电脑需要装好 USB 转串口芯片（CH340、CP210x、FTDI 等）的驱动。完整操作说明见 [使用说明](docs/USER_GUIDE.md)，图文版见 [产品使用说明书（PDF）](docs/manual/Cockpit产品使用说明书.pdf)。
 
 ## 当前限制
 

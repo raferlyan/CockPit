@@ -7,6 +7,7 @@ import type { Device } from '@shared/models'
 import type { AdbClient } from '../adb/AdbClient'
 import type { TraceLibrary } from './TraceLibrary'
 import { buildTraceConfig, isPackageName, MIN_SDK, TRACED_DEFAULT_SDK } from './traceConfig'
+import { formatCommand, recordCommand } from '../oplog/OperationLog'
 
 const REMOTE_CONFIG = '/data/local/tmp/cockpit-trace.pbtxt'
 const REMOTE_DIR = '/data/misc/perfetto-traces'
@@ -149,6 +150,7 @@ export class TraceRecorder {
     const command =
       `cat ${REMOTE_CONFIG} | perfetto --txt -c - -o ${rec.remotePath} & echo COCKPIT_PID=$! COCKPIT_BOOT=$(cat /proc/uptime); ` +
       'wait $!; echo COCKPIT_EXIT=$? COCKPIT_END=$(cat /proc/uptime)'
+    recordCommand(formatCommand('adb', ['-s', serial, 'shell', command]))
     const child = spawn(this.adb.adbPath, ['-s', serial, 'shell', command], { windowsHide: true })
     rec.child = child
     let stdout = ''

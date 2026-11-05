@@ -6,6 +6,7 @@ import { runDecryptTool } from './decryptTool'
 import { RootSession } from './RootSession'
 import type { RootSettingsStore } from './RootSettingsStore'
 import { driveSu, SuError, type PtyLike, type SuOptions } from './suDriver'
+import { formatCommand, recordCommand } from '../oplog/OperationLog'
 
 /** adb root 后 adbd 重启，设备会短暂离线 */
 const ADB_ROOT_WAIT = 30_000
@@ -102,6 +103,12 @@ export class RootService {
     this.sessions.get(serial)?.close()
     this.sessions.delete(serial)
 
+    recordCommand(formatCommand('adb', ['-s', serial, 'shell']), '后台 root 会话')
+    const settings = this.settings.get()
+    recordCommand(
+      [settings.suCommand || 'su', method === 'password' ? settings.passwordUser : ''].filter(Boolean).join(' '),
+      method === 'su' ? '在会话中执行' : method === 'password' ? '在会话中执行，随后自动输入保存的密码（不记录）' : '在会话中执行，读出挑战码交给解密工具，再输入算出的密码（不记录）'
+    )
     const proc = pty.spawn(this.adb.adbPath, ['-s', serial, 'shell'], {
       name: 'xterm-256color',
       cols: 200,

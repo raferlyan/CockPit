@@ -19,6 +19,9 @@ import { Splitter } from './settings/Splitter'
 import { ToolStripe, useToolWindowShortcuts } from './settings/ToolStripe'
 import { SettingsDialog } from './settings/SettingsDialog'
 import { RootSettingsDialog } from './root/RootSettingsDialog'
+import { Exit } from './motion/Exit'
+import { OperationLogPanel } from './oplog/OperationLogPanel'
+import { connectOplog } from './oplog/oplogStore'
 import { GuideTour } from './settings/GuideTour'
 import { AppManagerDialog } from './apps/AppManagerDialog'
 import { TraceView } from './trace/TraceView'
@@ -58,6 +61,7 @@ export function App() {
   useEffect(() => connectTheme(), [])
   useEffect(() => connectSettings(), [])
   useEffect(() => connectTraces(), [])
+  useEffect(() => connectOplog(() => useUiStore.getState().oplogOpen), [])
   usePreventFileNavigation()
   // 订阅语言：切换时整棵树重渲染（不卸载），主进程的对话框和错误信息也跟着切换
   const language = useLanguage()
@@ -69,7 +73,7 @@ export function App() {
   useToolWindowShortcuts()
   const panes = useSettingsStore((s) => s.panes)
   const collapsed = useSettingsStore((s) => s.collapsed)
-  const { settingsOpen, guideOpen, appsSerial, loggerSerial, traceOpen, rootSettings } = useUiStore()
+  const { settingsOpen, guideOpen, appsSerial, loggerSerial, traceOpen, rootSettings, oplogOpen } = useUiStore()
   // 默认中间显示设备状态；有投屏窗格时投屏占中间，状态挪到右侧
   const mirroring = useAppStore((s) => s.mirrorTiles.length > 0)
   // Perfetto 打开时占中间；投屏窗格只是隐藏，会话不断，收起后原样回来
@@ -142,13 +146,47 @@ export function App() {
       </main>
       {!collapsed.sidebar && <Splitter pane="sidebar" orientation="vertical" direction={1} className="splitter-sidebar" maxRatio={0.35} />}
       <AdbStatusBar />
-      {transfer && <FileTransferDialog />}
-      {appsSerial && <AppManagerDialog serial={appsSerial} />}
-      {loggerSerial && <LoggerExportDialog serial={loggerSerial} />}
-      {traceDialogSerial && <RecordTraceDialog serial={traceDialogSerial} />}
-      {shot && <ScreenshotDialog shot={shot} />}
-      {settingsOpen && <SettingsDialog />}
-      {rootSettings && <RootSettingsDialog serial={rootSettings.serial} />}
+      {/* Exit：关闭时播放退场动画 */}
+      {transfer && (
+        <Exit>
+          <FileTransferDialog />
+        </Exit>
+      )}
+      {appsSerial && (
+        <Exit>
+          <AppManagerDialog serial={appsSerial} />
+        </Exit>
+      )}
+      {loggerSerial && (
+        <Exit>
+          <LoggerExportDialog serial={loggerSerial} />
+        </Exit>
+      )}
+      {traceDialogSerial && (
+        <Exit>
+          <RecordTraceDialog serial={traceDialogSerial} />
+        </Exit>
+      )}
+      {shot && (
+        <Exit>
+          <ScreenshotDialog shot={shot} />
+        </Exit>
+      )}
+      {settingsOpen && (
+        <Exit>
+          <SettingsDialog />
+        </Exit>
+      )}
+      {rootSettings && (
+        <Exit>
+          <RootSettingsDialog serial={rootSettings.serial} />
+        </Exit>
+      )}
+      {oplogOpen && (
+        <Exit>
+          <OperationLogPanel />
+        </Exit>
+      )}
       {guideOpen && <GuideTour />}
       <Toaster />
     </div>

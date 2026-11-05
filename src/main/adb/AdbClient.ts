@@ -1,6 +1,7 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { connect, type Socket } from 'node:net'
 import { Semaphore } from '../util/Semaphore'
+import { formatCommand, recordCommand } from '../oplog/OperationLog'
 import { encodeRequest, parseDeviceList, readLengthPrefixed, type ListedDevice } from './protocol'
 
 export interface ExecOptions {
@@ -8,6 +9,8 @@ export interface ExecOptions {
   timeout?: number
   /** 取消时结束 adb 子进程 */
   signal?: AbortSignal
+  /** 操作日志里这条命令的说明，如「上传前检查目标目录」 */
+  note?: string
 }
 
 export class AdbError extends Error {
@@ -39,6 +42,7 @@ export class AdbClient {
   ) {}
 
   exec(args: string[], options: ExecOptions = {}): Promise<string> {
+    recordCommand(formatCommand('adb', args), options.note)
     return new Promise((resolve, reject) => {
       execFile(
         this.adbPath,
@@ -67,6 +71,7 @@ export class AdbClient {
 
   /** 输出为二进制的命令，如 `exec-out screencap -p` */
   execBuffer(args: string[], options: ExecOptions = {}): Promise<Buffer> {
+    recordCommand(formatCommand('adb', args), options.note)
     return new Promise((resolve, reject) => {
       execFile(
         this.adbPath,
@@ -124,6 +129,7 @@ export class AdbClient {
 
   /** 启动长时间运行的 adb 子进程（如 scrcpy-server），调用方负责结束它 */
   spawn(args: string[]): ChildProcessWithoutNullStreams {
+    recordCommand(formatCommand('adb', args))
     return spawn(this.adbPath, args, { windowsHide: true })
   }
 
