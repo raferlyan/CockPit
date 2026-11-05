@@ -84,11 +84,20 @@ const api: CockpitApi = {
     push: (serial, localPaths, remoteDir, transferId) => ipcRenderer.invoke(IpcChannel.FilesPush, serial, localPaths, remoteDir, transferId),
     cancel: (transferId) => ipcRenderer.send(IpcChannel.FilesCancel, transferId),
     diskUsage: (serial, dir, asRoot) => ipcRenderer.invoke(IpcChannel.FilesDiskUsage, serial, dir, asRoot),
+    remount: (serial, mountPoint) => ipcRenderer.invoke(IpcChannel.FilesRemount, serial, mountPoint),
     saveText: (defaultName, text) => ipcRenderer.invoke(IpcChannel.FilesSaveText, defaultName, text),
     onProgress: (listener) => subscribe(IpcChannel.FilesProgress, listener),
     pickApk: () => ipcRenderer.invoke(IpcChannel.FilesPickApk),
     pull: (serial, remotePath, localDir) => ipcRenderer.invoke(IpcChannel.FilesPull, serial, remotePath, localDir),
     reveal: (path) => ipcRenderer.send(IpcChannel.FilesReveal, path)
+  },
+  root: {
+    getSettings: () => ipcRenderer.invoke(IpcChannel.RootSettingsGet),
+    setSettings: (patch) => ipcRenderer.invoke(IpcChannel.RootSettingsSet, patch),
+    enter: (serial, method) => ipcRenderer.invoke(IpcChannel.RootEnter, serial, method),
+    exit: (serial) => ipcRenderer.invoke(IpcChannel.RootExit, serial),
+    pickTool: () => ipcRenderer.invoke(IpcChannel.RootPickTool),
+    testTool: (config, challenge) => ipcRenderer.invoke(IpcChannel.RootTestTool, config, challenge)
   },
   clipboard: {
     readText: () => ipcRenderer.invoke(IpcChannel.ClipboardRead),

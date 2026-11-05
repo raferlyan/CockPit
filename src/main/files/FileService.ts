@@ -1,10 +1,21 @@
 import { randomBytes } from 'node:crypto'
 import { stat } from 'node:fs/promises'
 import { basename } from 'node:path'
-import type { DiskUsage, RemoteEntry, TransferProgress, TransferResult } from '@shared/files'
+import type { DiskUsage, RemoteEntry, TransferPhase, TransferProgress, TransferResult } from '@shared/files'
 import type { AdbClient } from '../adb/AdbClient'
 import { syncPush } from '../adb/sync'
-import { diskUsageCommand, isPermissionError, listCommand, parseDiskUsage, parseLsOutput, remoteJoin, shellQuote } from './remotePath'
+import {
+  diskUsageCommand,
+  isPermissionError,
+  listCommand,
+  parseDiskUsage,
+  parseLsOutput,
+  parseTargetProbe,
+  remoteJoin,
+  shellQuote,
+  targetProbeCommand,
+  type TargetProbe
+} from './remotePath'
 
 /** 大文件走 USB 2.0 也可能要几分钟，给足时间 */
 const TRANSFER_TIMEOUT = 30 * 60_000
@@ -15,8 +26,19 @@ const DU_TIMEOUT = 3 * 60_000
 /** root 中转用的临时目录，shell 用户可读写 */
 const STAGING_DIR = '/data/local/tmp'
 
-/** su 的两种调用方式：Magisk / KernelSU 的 `su -c`，AOSP userdebug 的 `su 0 sh -c` */
-type SuStyle = 'dash-c' | 'uid' | 'none'
+/**
+ * 怎样拿到 root：adbd 本身是 root（adb root）时直接执行；
+ * 否则用 su，Magisk / KernelSU 是 `su -c`，AOSP userdebug 是 `su 0 sh -c`。
+ */
+export type RootAccess = 'adbd' | 'session' | 'dash-c' | 'uid' | 'none'
+
+/** 后台 root 会话（设备列表右键「进入 root」建立），能用时优先经它执行 */
+export interface RootChannel {
+  exec(command: string, timeout?: number): Promise<string>
+}
+
+/** 上传前检查目标目录，su 授权弹窗可能要等用户点 */
+const PROBE_TIMEOUT = 20_000
 
 /**
  * 本机与设备之间的文件传输。
@@ -24,9 +46,12 @@ type SuStyle = 'dash-c' | 'uid' | 'none'
  * 普通身份遇到权限问题时，若设备可以 su，就自动经 /data/local/tmp 用 root 中转。
  */
 export class FileService {
-  private readonly suStyles = new Map<string, Promise<SuStyle>>()
+  private readonly rootAccesses = new Map<string, Promise<RootAccess>>()
 
-  constructor(private readonly adb: AdbClient) {}
+  constructor(
+    private readonly adb: AdbClient,
+    private readonly rootChannel: (serial: string) => RootChannel | undefined = () => undefined
+  ) {}
 
   /** 列出设备目录，目录排在前面；无权限时尝试 root */
   async list(serial: string, dir: string): Promise<RemoteEntry[]> {
@@ -44,7 +69,8 @@ export class FileService {
 
   /**
    * 逐个上传到设备目录，单个失败不影响其它文件。
-   * 普通文件走 sync 协议并回报进度；目录交给 `adb push`，只回报开始和结束。
+   * 发送数据前先检查目标：分区只读、没有权限又没有 root 时直接说明原因，不白传一遍。
+   * 普通文件走 sync 协议并回报字节进度；目录交给 `adb push`，只回报开始和结束。
    */
   async push(
     serial: string,
@@ -55,36 +81,71 @@ export class FileService {
   ): Promise<TransferResult[]> {
     const sizes = await Promise.all(localPaths.map((p) => stat(p).then((s) => (s.isFile() ? s.size : 0)).catch(() => 0)))
     const total = sizes.reduce((a, b) => a + b, 0)
-    const writable = await this.prepareDir(serial, remoteDir, signal)
+    let index = 0
+    let done = 0
+    /** fileSent 为负数表示当前文件已全部发出 */
+    const emit = (phase: TransferPhase, fileSent = 0) =>
+      onProgress?.({
+        phase,
+        index,
+        count: localPaths.length,
+        name: basename(localPaths[index] ?? ''),
+        fileSent: fileSent < 0 ? sizes[index] : fileSent,
+        fileTotal: sizes[index] ?? 0,
+        sent: done + (fileSent < 0 ? sizes[index] : fileSent),
+        total
+      })
+
+    emit('check')
+    let blocked: string | null = null
+    /** 分区只读但拿得到 root 时，界面可以提供一键 remount */
+    let remountPoint: string | undefined
+    let viaRoot = false
+    try {
+      const probe = parseTargetProbe(await this.adb.shell(serial, targetProbeCommand(remoteDir), { timeout: PROBE_TIMEOUT, signal }))
+      if (!probe.writable) {
+        emit('root')
+        const access = await this.rootAccess(serial, signal)
+        signal?.throwIfAborted()
+        blocked = explainBlockedTarget(remoteDir, probe, access)
+        if (blocked && access !== 'none' && isReadOnly(probe)) remountPoint = probe.mount?.point ?? '/'
+        viaRoot = !blocked && access !== 'adbd'
+      }
+    } catch (error) {
+      blocked = signal?.aborted ? '已取消' : `检查目标目录失败：${(error as Error).message}`
+    }
+    if (blocked) {
+      const reason = blocked
+      return localPaths.map((local) => ({ source: local, target: remoteJoin(remoteDir, basename(local)), ok: false, message: reason, remount: remountPoint }))
+    }
 
     const results: TransferResult[] = []
-    let done = 0
-    for (const [index, local] of localPaths.entries()) {
+    for (const [i, local] of localPaths.entries()) {
+      index = i
       const name = basename(local)
       const target = remoteJoin(remoteDir, name)
       if (signal?.aborted) {
         results.push({ source: local, target, ok: false, message: '已取消' })
         continue
       }
-      const report = (fileSent: number) =>
-        onProgress?.({ index, count: localPaths.length, name, fileSent, fileTotal: sizes[index], sent: done + fileSent, total })
+      const report = (fileSent: number, phase: TransferPhase = 'send') => emit(phase, fileSent)
       try {
-        const viaRoot = !writable
         if (viaRoot) await this.pushViaRoot(serial, local, remoteDir, target, report, undefined, signal)
         else {
           try {
             await this.pushOne(serial, local, target, report, signal)
           } catch (error) {
+            // 目录可写但同名文件属于别的用户等情况
             if (!isPermissionError((error as Error).message)) throw error
             await this.pushViaRoot(serial, local, remoteDir, target, report, error as Error, signal)
           }
         }
         results.push({ source: local, target, ok: true, message: viaRoot ? '已通过 root 写入' : '' })
       } catch (error) {
-        results.push({ source: local, target, ok: false, message: explainWriteError((error as Error).message) })
+        results.push({ source: local, target, ok: false, message: signal?.aborted ? '已取消' : explainWriteError((error as Error).message) })
       }
-      report(sizes[index])
-      done += sizes[index]
+      report(-1)
+      done += sizes[i]
     }
     return results
   }
@@ -116,6 +177,27 @@ export class FileService {
     return parseDiskUsage(dir, out, asRoot)
   }
 
+  /**
+   * 把只读分区重新挂载为可写。adbd 是 root 时用 `adb remount`（会处理 overlayfs），
+   * 否则经 root 执行 `mount -o rw,remount`。返回给用户看的结果说明。
+   */
+  async remount(serial: string, point: string): Promise<string> {
+    const access = await this.rootAccess(serial)
+    if (access === 'none') throw new Error(`无法 remount：${NO_ROOT}`)
+    if (access === 'adbd') {
+      const out = await this.adb.exec(['-s', serial, 'remount'], { timeout: 60_000 }).catch((error: Error) => {
+        throw new Error(explainRemountError(error.message))
+      })
+      if (/reboot/i.test(out)) throw new Error(`adb remount 要求重启设备后才生效：请重启设备，再执行 adb root 后重试上传（adb 输出：${lastLine(out)}）`)
+      return lastLine(out) || 'remount succeeded'
+    }
+    const q = shellQuote(point)
+    await this.asRoot(serial, `mount -o rw,remount ${q} || mount -o remount,rw ${q}`, new Error(`${point}: Permission denied`), 30_000).catch((error: Error) => {
+      throw new Error(explainRemountError(error.message))
+    })
+    return `${point} 已重新挂载为可写`
+  }
+
   /** 已安装应用的包名，供终端补全使用 */
   async packages(serial: string): Promise<string[]> {
     const out = await this.adb.shell(serial, 'pm list packages', { timeout: 15_000 })
@@ -128,6 +210,7 @@ export class FileService {
 
   private async pushOne(serial: string, local: string, target: string, report: (sent: number) => void, signal?: AbortSignal): Promise<void> {
     const info = await stat(local)
+    report(0)
     if (info.isFile()) {
       try {
         await syncPush(this.adb.serverPort, serial, local, target, (sent) => report(sent), TRANSFER_TIMEOUT, signal)
@@ -149,12 +232,17 @@ export class FileService {
     local: string,
     remoteDir: string,
     target: string,
-    report: (sent: number) => void,
+    report: (sent: number, phase?: TransferPhase) => void,
     cause?: Error,
     signal?: AbortSignal
   ): Promise<void> {
+    // 先确认能拿到 root 再传，免得传完才发现没法复制过去
+    if ((await this.rootAccess(serial, signal)) === 'none') {
+      throw new Error(cause ? `${cause.message}（${NO_ROOT}）` : `没有写入 ${remoteDir} 的权限，${NO_ROOT}`)
+    }
     const staging = remoteJoin(STAGING_DIR, `cockpit-${randomBytes(4).toString('hex')}-${basename(local)}`)
     await this.pushOne(serial, local, staging, report, signal)
+    report(-1, 'root-copy')
     try {
       // 先复制成临时名再改名覆盖：替换正在运行的 APK（如 SystemUI）时旧文件仍被映射，不会先删掉再写
       const temp = `${target}.cockpit-tmp`
@@ -170,7 +258,12 @@ export class FileService {
         cause ?? new Error(`${remoteDir}: Permission denied`),
         ROOT_COPY_TIMEOUT,
         signal
-      )
+      ).catch((error: Error) => {
+        if (/timed out/i.test(error.message)) {
+          throw new Error(`用 root 写入目标位置 ${ROOT_COPY_TIMEOUT / 60_000} 分钟仍未完成（可能在等设备上的 su 授权）`)
+        }
+        throw error
+      })
     } finally {
       await this.adb.shell(serial, `rm -rf ${shellQuote(staging)}`).catch(() => undefined)
     }
@@ -191,39 +284,76 @@ export class FileService {
     }
   }
 
-  /** 确保目录存在，返回 shell 身份能否写入；不能写时上传改走 root */
-  private async prepareDir(serial: string, dir: string, signal?: AbortSignal): Promise<boolean> {
-    const q = shellQuote(dir)
-    const out = await this.adb.shell(serial, `mkdir -p ${q} 2>/dev/null; [ -d ${q} ] && [ -w ${q} ] && echo W; exit 0`, { signal })
-    return out.trim() === 'W'
-  }
-
-  /** 以 root 执行；设备没有可用的 su 时抛出原来的权限错误并说明原因 */
+  /** 以 root 执行；设备拿不到 root 时抛出原来的权限错误并说明原因 */
   private async asRoot(serial: string, command: string, cause: Error, timeout = TRANSFER_TIMEOUT, signal?: AbortSignal): Promise<string> {
-    const style = await this.suStyle(serial)
-    if (style === 'none') throw new Error(`${cause.message}（设备没有可用的 su，无法提权访问）`)
-    const wrapped = style === 'dash-c' ? `su -c ${shellQuote(command)}` : `su 0 sh -c ${shellQuote(command)}`
+    const access = await this.rootAccess(serial, signal)
+    if (access === 'none') throw new Error(`${cause.message}（${NO_ROOT}）`)
+    if (access === 'session') {
+      signal?.throwIfAborted()
+      return this.rootChannel(serial)!.exec(command, timeout)
+    }
+    const wrapped = access === 'adbd' ? command : access === 'dash-c' ? `su -c ${shellQuote(command)}` : `su 0 sh -c ${shellQuote(command)}`
     return this.adb.shell(serial, wrapped, { timeout, signal })
   }
 
-  /** 探测一次 su 的用法并缓存；失败的结果不缓存，用户在设备上授权后可以重试 */
-  private suStyle(serial: string): Promise<SuStyle> {
-    let cached = this.suStyles.get(serial)
+  /** 探测一次怎样拿 root 并缓存；拿不到的结果不缓存，用户在设备上授权或 adb root 后可以重试 */
+  private rootAccess(serial: string, signal?: AbortSignal): Promise<RootAccess> {
+    if (this.rootChannel(serial)) return Promise.resolve('session')
+    let cached = this.rootAccesses.get(serial)
     if (!cached) {
-      cached = (async (): Promise<SuStyle> => {
-        // 已是 root 的 adbd 直接执行即可
-        const uid = await this.adb.shell(serial, 'id -u').catch(() => '')
-        if (uid.trim() === '0') return 'none'
-        const probe = async (cmd: string) => /uid=0\b/.test(await this.adb.shell(serial, cmd, { timeout: 20_000 }).catch(() => ''))
+      cached = (async (): Promise<RootAccess> => {
+        const uid = await this.adb.shell(serial, 'id -u', { signal }).catch(() => '')
+        if (uid.trim() === '0') return 'adbd'
+        const probe = async (cmd: string) => /uid=0\b/.test(await this.adb.shell(serial, cmd, { timeout: PROBE_TIMEOUT, signal }).catch(() => ''))
         if (await probe('su -c id')) return 'dash-c'
         if (await probe('su 0 id')) return 'uid'
         return 'none'
       })()
-      this.suStyles.set(serial, cached)
-      void cached.then((style) => style === 'none' && this.suStyles.delete(serial))
+      this.rootAccesses.set(serial, cached)
+      void cached.then((access) => access === 'none' && this.rootAccesses.delete(serial))
     }
     return cached
   }
+}
+
+const NO_ROOT = '拿不到 root：adbd 不是 root，su 不能免密使用，也还没有在左侧设备列表右键「进入 root」'
+
+function isReadOnly(probe: TargetProbe): boolean {
+  return Boolean(probe.mount?.readOnly) || /read-only file system/i.test(probe.mkdirError)
+}
+
+/** remount 失败多半是 verity / 动态分区挡住了 */
+function explainRemountError(message: string): string {
+  if (/verity|dm-|busy|permission denied|not permitted|invalid argument/i.test(message)) {
+    return `remount 失败：${message}（这台设备的分区受 verity 或动态分区保护，单纯 mount 改不了，需要 adb root && adb disable-verity，重启后再 adb root && adb remount）`
+  }
+  return `remount 失败：${message}`
+}
+
+/**
+ * 根据上传前的检查结果说明为什么写不进去；能通过 root 写入时返回 null。
+ * 区分“分区只读，需要 remount”和“没有权限，需要 root”，并按设备的 root 情况给出具体办法。
+ */
+export function explainBlockedTarget(dir: string, probe: TargetProbe, access: RootAccess): string | null {
+  if (isReadOnly(probe)) {
+    const point = probe.mount?.point ?? dir
+    const head = `目标目录 ${dir} 所在的分区 ${point} 是只读挂载的，`
+    if (access === 'adbd') {
+      return `${head}adbd 已是 root，但该分区还没有 remount。请执行 adb remount；如果提示需要关闭 verity，先执行 adb disable-verity 并重启设备，再执行 adb root && adb remount`
+    }
+    if (access === 'session') {
+      return `${head}已经进入 root，但该分区还没有 remount。可以点「remount 后重试」，或在 root 终端里执行 mount -o rw,remount ${point}`
+    }
+    if (access !== 'none') {
+      return `${head}设备已 root（su 可用），但该分区还没有 remount。可以点「remount 后重试」，或在终端里 su 后执行 mount -o rw,remount ${point}；开启了 verity 的设备需要先 adb root && adb disable-verity && adb remount`
+    }
+    return `${head}而且${NO_ROOT}，无法写入。userdebug / eng 版本可以先执行 adb root && adb remount；user 版本需要先 root 设备`
+  }
+  if (access === 'none') {
+    if (!probe.exists && probe.mkdirError && !isPermissionError(probe.mkdirError)) return `无法创建目录 ${dir}：${probe.mkdirError}`
+    return `没有写入 ${dir} 的权限，而且${NO_ROOT}。可以改传到 /sdcard 或 /data/local/tmp`
+  }
+  return null
 }
 
 /** system、vendor 等分区默认只读，给出处理办法 */

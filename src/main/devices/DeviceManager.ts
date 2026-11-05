@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events'
 import type { AdbStatus, Device } from '@shared/models'
+import type { RootMethod } from '@shared/root'
 import type { AdbClient } from '../adb/AdbClient'
 import type { ListedDevice } from '../adb/protocol'
 import { DEVICE_INFO_COMMAND, parseDeviceInfoOutput } from './deviceInfo'
@@ -50,6 +51,14 @@ export class DeviceManager extends EventEmitter<DeviceManagerEvents> {
     this.disposed = true
     clearTimeout(this.retryTimer)
     this.stopTracking?.()
+  }
+
+  /** 后台 root 会话建立或结束时调用 */
+  setRootSession(serial: string, method: RootMethod | undefined): void {
+    const device = this.devices.get(serial)
+    if (!device || device.rootSession === method) return
+    this.devices.set(serial, { ...device, rootSession: method })
+    this.emitDevices()
   }
 
   /** 终端身份变化时调用：该设备有任一终端处于 root 身份就标记 shellRoot */
@@ -109,6 +118,7 @@ export class DeviceManager extends EventEmitter<DeviceManagerEvents> {
         info: keepInfo ? previous?.info : undefined,
         root: keepInfo ? (previous?.root ?? 'unknown') : 'unknown',
         shellRoot: keepInfo ? previous?.shellRoot : undefined,
+        rootSession: keepInfo ? previous?.rootSession : undefined,
         infoError: keepInfo ? previous?.infoError : undefined
       })
       if (becameReady) void this.loadInfo(item.serial)

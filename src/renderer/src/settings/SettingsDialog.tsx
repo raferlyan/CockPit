@@ -192,6 +192,15 @@ export function SettingsDialog() {
           <button className="secondary" onClick={settings.resetPanes}>
             {t('恢复默认布局')}
           </button>
+          <button
+            className="secondary"
+            onClick={() => {
+              close()
+              useUiStore.getState().openRootSettings(null)
+            }}
+          >
+            {t('root 方式…')}
+          </button>
           <span className="spacer" />
           <button className="secondary" onClick={settings.reset}>
             {t('全部恢复默认')}

@@ -16,6 +16,9 @@ import { applyTheme, loadTheme, windowBackground } from './theme'
 import { PerfettoUiServer } from './trace/PerfettoUiServer'
 import { TraceLibrary } from './trace/TraceLibrary'
 import { TraceRecorder } from './trace/TraceRecorder'
+import { RootService } from './root/RootService'
+import { RootSettingsStore } from './root/RootSettingsStore'
+import { safeStorage } from 'electron'
 
 let deviceManager: DeviceManager | undefined
 let mirror: MirrorService | undefined
@@ -26,6 +29,7 @@ let apps: AppService | undefined
 const serial = new SerialService()
 let perfetto: PerfettoUiServer | undefined
 let recorder: TraceRecorder | undefined
+let rootService: RootService | undefined
 
 /** 开发时为项目根目录下的 resources/，打包后为 extraResources 目录 */
 function resourcesDir(): string {
@@ -69,6 +73,11 @@ function createWindow(): void {
 async function bootstrap(): Promise<void> {
   const adbPath = await resolveAdbPath({ bundledDir: app.isPackaged ? process.resourcesPath : undefined })
   let adb: AdbClient | undefined
+  const rootSettings = new RootSettingsStore(join(app.getPath('userData'), 'root-settings.json'), {
+    available: () => safeStorage.isEncryptionAvailable(),
+    encrypt: (text) => safeStorage.encryptString(text).toString('base64'),
+    decrypt: (data) => safeStorage.decryptString(Buffer.from(data, 'base64'))
+  })
   let fallbackStatus: AdbStatus = { path: null, tracking: false, error: '未找到 adb，请安装 Android SDK platform-tools 或设置 ANDROID_HOME' }
 
   if (adbPath) {
@@ -82,11 +91,20 @@ async function bootstrap(): Promise<void> {
     deviceManager = new DeviceManager(adb, version)
     mirror = new MirrorService(adb, join(resourcesDir(), 'scrcpy-server'))
     const devices = deviceManager
-    shellService = new ShellService(adbPath, (serial, root) => devices.setShellRoot(serial, root))
+    const roots = new RootService(
+      adb,
+      rootSettings,
+      (serial, method) => devices.setRootSession(serial, method),
+      (serial) => void devices.refreshInfo(serial)
+    )
+    rootService = roots
+    shellService = new ShellService(adbPath, (serial, root) => devices.setShellRoot(serial, root), roots)
     metrics = new MetricsService(adb, (event) => broadcast(IpcChannel.MetricsEvent, event))
-    files = new FileService(adb)
+    files = new FileService(adb, (serial) => roots.session(serial))
     apps = new AppService(adb)
   }
+  // 没有 adb 时也能开本机终端
+  shellService ??= new ShellService(null)
   const traces = new TraceLibrary(join(app.getPath('documents'), 'Cockpit', 'Traces'), (path) => shell.trashItem(path))
   if (adb && deviceManager && metrics) {
     const manager = deviceManager
@@ -101,7 +119,22 @@ async function bootstrap(): Promise<void> {
   }
 
   perfetto = new PerfettoUiServer(join(resourcesDir(), 'perfetto-ui'))
-  registerIpc({ adb, deviceManager, mirror, shell: shellService, metrics, files, apps, serial, perfetto, traces, recorder, fallbackStatus })
+  registerIpc({
+    adb,
+    deviceManager,
+    mirror,
+    shell: shellService,
+    metrics,
+    files,
+    apps,
+    serial,
+    perfetto,
+    traces,
+    recorder,
+    root: rootService,
+    rootSettings,
+    fallbackStatus
+  })
   createWindow()
   void deviceManager?.start()
 }
@@ -132,6 +165,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   mirror?.dispose()
   shellService?.dispose()
+  rootService?.dispose()
   metrics?.dispose()
   serial.dispose()
   perfetto?.dispose()

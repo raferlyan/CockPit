@@ -7,12 +7,15 @@ import { useAppStore } from '../store'
 import { deviceTitle, STATE_LABEL } from '../labels'
 import { RootBadge } from './RootBadge'
 import { CollapseButton } from '../settings/ToolStripe'
+import { DeviceContextMenu } from '../root/DeviceContextMenu'
 import { t } from '../i18n'
 
 export function DeviceList() {
   const devices = useAppStore((s) => s.devices)
   const focusedSerial = useAppStore((s) => s.focusedSerial)
   const focus = useAppStore((s) => s.focus)
+  const [menu, setMenu] = useState<{ serial: string; x: number; y: number } | null>(null)
+  const menuDevice = menu && devices.find((d) => d.serial === menu.serial)
 
   return (
     <aside className="sidebar" data-tour="device-list">
@@ -31,25 +34,38 @@ export function DeviceList() {
             device={device}
             active={device.serial === focusedSerial}
             onSelect={() => focus(device.serial)}
+            onMenu={(x, y) => {
+              focus(device.serial)
+              setMenu({ serial: device.serial, x, y })
+            }}
           />
         ))}
         {devices.length === 0 && <li className="empty">{t('未检测到设备，请连接 USB 并开启调试')}</li>}
       </ul>
 
       <ConnectForm />
+      {menu && menuDevice && <DeviceContextMenu device={menuDevice} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
     </aside>
   )
 }
 
-function DeviceItem({ device, active, onSelect }: { device: Device; active: boolean; onSelect(): void }) {
+function DeviceItem({ device, active, onSelect, onMenu }: { device: Device; active: boolean; onSelect(): void; onMenu(x: number, y: number): void }) {
   const ready = device.state === 'device'
   return (
     <li>
-      <button className={`device-item${active ? ' active' : ''}${ready ? '' : ' dim'}`} onClick={onSelect}>
+      <button
+        className={`device-item${active ? ' active' : ''}${ready ? '' : ' dim'}`}
+        onClick={onSelect}
+        title={t('右键：进入 root、打开 root 终端、设置 root 方式')}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          onMenu(e.clientX, e.clientY)
+        }}
+      >
         <div className="device-item-top">
           <span className={`dot state-${ready ? 'ok' : 'warn'}`} />
           <span className="device-name">{deviceTitle(device)}</span>
-          {ready && <RootBadge state={device.root} shellRoot={device.shellRoot} compact />}
+          {ready && <RootBadge state={device.root} shellRoot={device.shellRoot} session={device.rootSession} compact />}
         </div>
         <div className="device-item-sub">
           <span className="mono">{device.serial}</span>

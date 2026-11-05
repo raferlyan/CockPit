@@ -67,7 +67,7 @@ export function DeviceDetail() {
       <div className="panel-title-row">
         <h2 className="panel-title">{deviceTitle(device)}</h2>
         <span className="panel-title-end">
-          {device.state === 'device' && <RootBadge state={device.root} shellRoot={device.shellRoot} />}
+          {device.state === 'device' && <RootBadge state={device.root} shellRoot={device.shellRoot} session={device.rootSession} />}
           <CollapseButton pane="side" />
         </span>
       </div>

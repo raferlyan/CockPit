@@ -1,3 +1,5 @@
+import type { RootMethod } from './root'
+
 /** adb 上报的设备状态，与 `adb devices` 输出一致 */
 export type DeviceState =
   | 'device'
@@ -47,6 +49,8 @@ export interface Device {
   root: RootState
   /** 应用内有终端通过 su 切到了 root（提示符为 #），与 adbd 是否 root 无关 */
   shellRoot?: boolean
+  /** 设备列表右键「进入 root」建立的后台 root 会话及其方式 */
+  rootSession?: RootMethod
   /** 拉取设备信息失败时的错误 */
   infoError?: string
 }

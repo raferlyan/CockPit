@@ -23,6 +23,8 @@ interface UiState {
   traceOpen: boolean
   /** Perfetto 里当前加载的 trace，收起后再打开会重新加载 */
   trace: TraceSource | null
+  /** root 方式设置对话框；serial 为从设备右键打开时的设备 */
+  rootSettings: { serial: string | null } | null
   setSettingsOpen(open: boolean): void
   setGuideOpen(open: boolean): void
   /** 看完或跳过向导，之后不再自动弹出 */
@@ -31,6 +33,8 @@ interface UiState {
   openLogger(serial: string | null): void
   setTraceOpen(open: boolean): void
   setTrace(trace: TraceSource | null): void
+  openRootSettings(serial: string | null): void
+  closeRootSettings(): void
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -40,6 +44,9 @@ export const useUiStore = create<UiState>((set) => ({
   loggerSerial: null,
   traceOpen: false,
   trace: null,
+  rootSettings: null,
+  openRootSettings: (serial) => set({ rootSettings: { serial } }),
+  closeRootSettings: () => set({ rootSettings: null }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setGuideOpen: (guideOpen) => set({ guideOpen }),
   finishGuide: () => {

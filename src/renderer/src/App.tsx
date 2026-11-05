@@ -18,6 +18,7 @@ import { useUiStore } from './settings/uiStore'
 import { Splitter } from './settings/Splitter'
 import { ToolStripe, useToolWindowShortcuts } from './settings/ToolStripe'
 import { SettingsDialog } from './settings/SettingsDialog'
+import { RootSettingsDialog } from './root/RootSettingsDialog'
 import { GuideTour } from './settings/GuideTour'
 import { AppManagerDialog } from './apps/AppManagerDialog'
 import { TraceView } from './trace/TraceView'
@@ -68,7 +69,7 @@ export function App() {
   useToolWindowShortcuts()
   const panes = useSettingsStore((s) => s.panes)
   const collapsed = useSettingsStore((s) => s.collapsed)
-  const { settingsOpen, guideOpen, appsSerial, loggerSerial, traceOpen } = useUiStore()
+  const { settingsOpen, guideOpen, appsSerial, loggerSerial, traceOpen, rootSettings } = useUiStore()
   // 默认中间显示设备状态；有投屏窗格时投屏占中间，状态挪到右侧
   const mirroring = useAppStore((s) => s.mirrorTiles.length > 0)
   // Perfetto 打开时占中间；投屏窗格只是隐藏，会话不断，收起后原样回来
@@ -147,6 +148,7 @@ export function App() {
       {traceDialogSerial && <RecordTraceDialog serial={traceDialogSerial} />}
       {shot && <ScreenshotDialog shot={shot} />}
       {settingsOpen && <SettingsDialog />}
+      {rootSettings && <RootSettingsDialog serial={rootSettings.serial} />}
       {guideOpen && <GuideTour />}
       <Toaster />
     </div>

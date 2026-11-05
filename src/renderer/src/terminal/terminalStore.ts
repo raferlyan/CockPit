@@ -14,6 +14,8 @@ export interface TerminalTab {
   logcatArgs?: string
   /** 仅串口标签 */
   port?: SerialOptions
+  /** 仅 shell：打开时自动按设备的 root 方式切到 root，重新连接时也一样 */
+  root?: boolean
   identity: TerminalIdentity
   exit?: { code: number; reason?: string }
   /** 仅 logcat：界面上的筛选条件 */
@@ -27,6 +29,8 @@ interface TerminalState {
   activeId: string | null
   /** initialInput：打开后立即输入的内容，如 `cd /data/app\r` */
   open(serial: string, kind: Exclude<TerminalKind, 'serial'>, logcatArgs?: string, initialInput?: string): Promise<void>
+  /** 打开一个自动切到 root 的设备终端 */
+  openRoot(serial: string): Promise<void>
   /** 打开串口；成功返回 true，失败时已弹出提示 */
   openSerial(options: SerialOptions): Promise<boolean>
   /** 关闭标签并结束进程 */
@@ -41,15 +45,22 @@ interface TerminalState {
 /** xterm 挂载后会立即按实际尺寸 resize，这里只是初始值 */
 const INITIAL_SIZE = { cols: 120, rows: 12 }
 
-function startSession(tab: Pick<TerminalTab, 'serial' | 'kind' | 'logcatArgs' | 'port'>): Promise<TerminalSessionInfo> {
+type TabConfig = Pick<TerminalTab, 'serial' | 'kind' | 'logcatArgs' | 'port' | 'root'>
+
+function startSession(tab: TabConfig): Promise<TerminalSessionInfo> {
   if (tab.kind === 'serial') return api.terminal.openSerial(tab.port!, INITIAL_SIZE)
-  return api.terminal.open(tab.serial, { kind: tab.kind, logcatArgs: tab.logcatArgs, ...INITIAL_SIZE })
+  return api.terminal.open(tab.serial, { kind: tab.kind, logcatArgs: tab.logcatArgs, root: tab.root, ...INITIAL_SIZE })
 }
 
-const FAILED_TITLE = (): Record<TerminalKind, string> => ({ shell: t('打开终端失败'), logcat: t('打开 logcat 失败'), serial: t('打开串口失败') })
+const FAILED_TITLE = (): Record<TerminalKind, string> => ({
+  shell: t('打开终端失败'),
+  logcat: t('打开 logcat 失败'),
+  serial: t('打开串口失败'),
+  local: t('打开本机终端失败')
+})
 
 export const useTerminalStore = create<TerminalState>((set, get) => {
-  const add = async (config: Pick<TerminalTab, 'serial' | 'kind' | 'logcatArgs' | 'port'>, initialInput?: string): Promise<boolean> => {
+  const add = async (config: TabConfig, initialInput?: string): Promise<boolean> => {
     try {
       const info = await startSession(config)
       const tab: TerminalTab = { ...config, id: info.id, identity: 'unknown', logcatFilter: config.kind === 'logcat' ? DEFAULT_FILTER : undefined }
@@ -69,6 +80,9 @@ export const useTerminalStore = create<TerminalState>((set, get) => {
     activeId: null,
     open: async (serial, kind, logcatArgs, initialInput) => {
       await add({ serial, kind, logcatArgs }, initialInput)
+    },
+    openRoot: async (serial) => {
+      await add({ serial, kind: 'shell', root: true })
     },
     openSerial: (port) => add({ serial: '', kind: 'serial', port }),
     close: (id) => {

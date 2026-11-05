@@ -85,3 +85,90 @@ export function parseDiskUsage(dir: string, out: string, root: boolean): DiskUsa
   entries.sort((a, b) => b.sizeKB - a.sizeKB || a.name.localeCompare(b.name))
   return { dir, totalKB, entries, partial, root }
 }
+
+export const MOUNTS_SEP = '__COCKPIT_MOUNTS__'
+
+/**
+ * 上传前检查目标目录的 shell 脚本：建目录、看能否写、adbd 身份，
+ * 找到最近的已存在上级目录并解析符号链接（/sdcard → /storage/emulated/0），最后附上挂载表。
+ */
+export function targetProbeCommand(dir: string): string {
+  const q = shellQuote(dir)
+  return [
+    `err=$(mkdir -p ${q} 2>&1)`,
+    `[ -d ${q} ] && echo E=1`,
+    `[ -w ${q} ] && echo W=1`,
+    'echo U=$(id -u)',
+    `p=${q}`,
+    'while [ ! -e "$p" ] && [ "$p" != / ] && [ -n "$p" ]; do p=$(dirname "$p"); done',
+    'echo R=$(readlink -f "$p" 2>/dev/null || echo "$p")',
+    'echo "M=$(echo "$err" | head -n 1)"',
+    `echo ${MOUNTS_SEP}`,
+    'cat /proc/mounts 2>/dev/null',
+    'exit 0'
+  ].join('; ')
+}
+
+export interface MountEntry {
+  device: string
+  point: string
+  type: string
+  readOnly: boolean
+}
+
+export interface TargetProbe {
+  exists: boolean
+  writable: boolean
+  /** adbd 的 uid，0 表示 adb root */
+  uid: number
+  /** 目标（或最近的已存在上级目录）解析符号链接后的真实路径 */
+  realPath: string
+  /** mkdir 失败时的错误 */
+  mkdirError: string
+  /** 目标所在的挂载点，读不到挂载表时为 undefined */
+  mount?: MountEntry
+}
+
+/** /proc/mounts 把空格等写成 \040 这样的八进制转义 */
+function unescapeMount(text: string): string {
+  return text.replace(/\\([0-7]{3})/g, (_m, oct: string) => String.fromCharCode(parseInt(oct, 8)))
+}
+
+export function parseMounts(text: string): MountEntry[] {
+  const mounts: MountEntry[] = []
+  for (const line of text.split(/\r?\n/)) {
+    const [device, point, type, options] = line.trim().split(/\s+/)
+    if (!device || !point || !options) continue
+    mounts.push({ device, point: unescapeMount(point), type, readOnly: options.split(',').includes('ro') })
+  }
+  return mounts
+}
+
+/** 路径所在的挂载点：最长前缀匹配，同一挂载点挂了多次时后挂的生效 */
+export function findMount(mounts: MountEntry[], path: string): MountEntry | undefined {
+  let best: MountEntry | undefined
+  for (const mount of mounts) {
+    const point = mount.point.replace(/\/+$/, '') || '/'
+    const covers = point === '/' || path === point || path.startsWith(`${point}/`)
+    if (covers && (!best || point.length >= (best.point.replace(/\/+$/, '') || '/').length)) best = mount
+  }
+  return best
+}
+
+export function parseTargetProbe(out: string): TargetProbe {
+  const [head = '', mountText = ''] = out.split(MOUNTS_SEP)
+  const values = new Map<string, string>()
+  for (const line of head.split(/\r?\n/)) {
+    const match = line.replace(/\r$/, '').match(/^([A-Z])=(.*)$/)
+    if (match) values.set(match[1], match[2])
+  }
+  const realPath = values.get('R') || '/'
+  return {
+    exists: values.get('E') === '1',
+    writable: values.get('W') === '1',
+    uid: Number(values.get('U') ?? -1),
+    realPath,
+    mkdirError: (values.get('M') ?? '').trim(),
+    mount: findMount(parseMounts(mountText), realPath)
+  }
+}

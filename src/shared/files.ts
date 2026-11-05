@@ -10,10 +10,22 @@ export interface TransferResult {
   target: string
   ok: boolean
   message: string
+  /** 失败原因是分区只读、但拿得到 root：可以 remount 这个挂载点后重试 */
+  remount?: string
 }
+
+/**
+ * 上传所处的阶段：
+ * - check：检查目标目录能否写入、所在分区是否只读
+ * - root：探测 su，设备上可能弹出授权框等待点击
+ * - send：传输数据，fileTotal 为 0 时（目录）没有字节进度
+ * - root-copy：数据已在设备临时目录，正在用 root 复制到目标位置
+ */
+export type TransferPhase = 'check' | 'root' | 'send' | 'root-copy'
 
 /** 上传进度：sent / total 为本批所有文件的累计字节数（目录不计大小） */
 export interface TransferProgress {
+  phase: TransferPhase
   /** 当前文件在本批中的下标 */
   index: number
   count: number

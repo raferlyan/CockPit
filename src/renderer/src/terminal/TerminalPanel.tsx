@@ -8,6 +8,10 @@ import { SerialDialog } from './SerialDialog'
 import { CollapseButton } from '../settings/ToolStripe'
 import { LogcatFilterBar } from './LogcatFilterBar'
 import { t } from '../i18n'
+import { api } from '../api'
+
+/** Windows 上是 PowerShell，其它系统是登录 shell */
+const LOCAL_LABEL = () => (api.platform === 'win32' ? 'PowerShell' : t('本机终端'))
 
 const LOGCAT_PLACEHOLDER = () => t('可选启动参数，如 -b crash 或 -s ActivityManager；打开后还可在筛选栏里过滤')
 
@@ -22,11 +26,13 @@ export function TerminalPanel() {
 
   const titleOf = (tab: TerminalTab) => {
     if (tab.port) return `${t('串口')} ${tab.port.path.split(/[\\/]/).pop()} · ${tab.port.baudRate}`
+    if (tab.kind === 'local') return LOCAL_LABEL()
     const device = devices.find((d) => d.serial === tab.serial)
-    return `${device ? deviceTitle(device) : tab.serial} · ${tab.kind}`
+    return `${device ? deviceTitle(device) : tab.serial} · ${tab.root ? 'root shell' : tab.kind}`
   }
   const tooltipOf = (tab: TerminalTab) => {
     if (tab.port) return tab.port.path
+    if (tab.kind === 'local') return t('本机终端，可以直接使用 adb')
     return [`${t('序列号')} ${tab.serial}`, tab.logcatArgs && `logcat ${tab.logcatArgs}`].filter(Boolean).join('\n')
   }
   const active = tabs.find((t) => t.id === activeId)
@@ -93,6 +99,9 @@ export function TerminalPanel() {
             <ActionButton className="tool" disabledReason={noDeviceReason} onClick={() => setLogcatArgs('')}>
               + Logcat
             </ActionButton>
+            <button className="tool" title={t('本机终端，可以直接使用 adb')} onClick={() => void open('', 'local')}>
+              + {LOCAL_LABEL()}
+            </button>
             <button className="tool" onClick={() => setSerialOpen(true)}>
               + {t('串口')}
             </button>

@@ -60,7 +60,10 @@ export function FileTransferDialog() {
   const [busy, setBusy] = useState<string | null>(null)
   const [log, setLog] = useState<LogItem[]>([])
   const [dropping, setDropping] = useState(false)
-  const [progress, setProgress] = useState<(TransferProgress & { startedAt: number }) | null>(null)
+  const [progress, setProgress] = useState<UploadState | null>(null)
+  /** 最近一次上传失败的原因，常驻显示，不只靠一闪而过的通知 */
+  const [failure, setFailure] = useState<{ message: string; remount?: string; dir?: string } | null>(null)
+  const [remounting, setRemounting] = useState(false)
   /** 进行中的上传，可以取消 */
   const [uploadId, setUploadId] = useState<string | null>(null)
 
@@ -101,14 +104,23 @@ export function FileTransferDialog() {
     return () => window.removeEventListener('keydown', onKey)
   }, [busy, closeTransfer])
 
-  const upload = async () => {
-    const target = dirInput.trim() || dir
+  const upload = async (targetDir?: string) => {
+    const target = targetDir ?? (dirInput.trim() || dir)
     const transferId = crypto.randomUUID()
     const startedAt = Date.now()
     setBusy(t('正在上传 {n} 个文件…', { n: transfer.files.length }))
     setUploadId(transferId)
+    setFailure(null)
+    // 点下去马上出现进度区，不等主进程的第一条进度
+    setProgress({ phase: 'check', index: 0, count: transfer.files.length, name: '', fileSent: 0, fileTotal: 0, sent: 0, total: 0, startedAt, sendStartedAt: null })
     const off = api.files.onProgress((event) => {
-      if (event.transferId === transferId) setProgress({ ...event, startedAt })
+      if (event.transferId !== transferId) return
+      setProgress((prev) => ({
+        ...event,
+        startedAt,
+        // 速度从真正开始发数据算起，不把检查目录、等 su 授权的时间算进去
+        sendStartedAt: prev?.sendStartedAt ?? (event.phase === 'send' && event.fileTotal > 0 ? Date.now() - 1 : null)
+      }))
     })
     try {
       const results = await api.files.push(transfer.serial, transfer.files, target, transferId)
@@ -116,17 +128,36 @@ export function FileTransferDialog() {
       const failed = results.filter((r) => !r.ok)
       const cancelled = failed.length > 0 && failed.every((r) => /已取消|Cancelled/.test(r.message))
       if (cancelled) notify('info', t('已取消上传'))
-      else if (failed.length) notify('error', t('{n} 个文件上传失败', { n: failed.length }), failed[0].message)
+      else if (failed.length) {
+        notify('error', t('{n} 个文件上传失败', { n: failed.length }), failed[0].message)
+        setFailure({ message: [...new Set(failed.map((r) => r.message))].join('\n'), remount: failed.find((r) => r.remount)?.remount, dir: target })
+      }
       else notify('success', t('已上传 {n} 个文件到 {dir}', { n: results.length, dir: target }))
       for (const r of results) if (r.ok) removeFile(r.source)
       void browse(target)
     } catch (error) {
       notify('error', t('上传失败'), errorMessage(error))
+      setFailure({ message: errorMessage(error) })
     } finally {
       off()
       setProgress(null)
       setBusy(null)
       setUploadId(null)
+    }
+  }
+
+  /** 用 root 把只读分区重新挂载为可写，成功后重新上传 */
+  const remountAndRetry = async (mountPoint: string, target: string) => {
+    setRemounting(true)
+    try {
+      const message = await api.files.remount(transfer.serial, mountPoint)
+      notify('success', t('已重新挂载 {point}', { point: mountPoint }), message)
+      setFailure(null)
+      await upload(target)
+    } catch (error) {
+      setFailure({ message: errorMessage(error), dir: target })
+    } finally {
+      setRemounting(false)
     }
   }
 
@@ -251,6 +282,17 @@ export function FileTransferDialog() {
         </div>
 
         {progress && <UploadProgress progress={progress} />}
+        {failure && !progress && (
+          <div className="transfer-failure" role="alert">
+            <strong>{t('上传失败')}</strong>
+            <p>{failure.message}</p>
+            {failure.remount && failure.dir && (
+              <button className="secondary" disabled={remounting || !online} onClick={() => void remountAndRetry(failure.remount!, failure.dir!)}>
+                {remounting ? t('正在 remount…') : t('remount {point} 后重试', { point: failure.remount })}
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="dialog-actions">
           {busy && !progress && <span className="muted">{busy}</span>}
@@ -289,30 +331,69 @@ export function FileTransferDialog() {
   )
 }
 
-function UploadProgress({ progress }: { progress: TransferProgress & { startedAt: number } }) {
+type UploadState = TransferProgress & { startedAt: number; sendStartedAt: number | null }
+
+/** 每秒刷新一次，没有新进度时也能看到计时在走，不会以为卡死 */
+function useTicker(): number {
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+  return now
+}
+
+function phaseLabel(progress: UploadState): string {
+  switch (progress.phase) {
+    case 'check':
+      return t('正在检查目标目录（是否可写、分区是否只读）…')
+    case 'root':
+      return t('目标目录需要 root，正在获取 root 权限…设备上弹出授权时请点允许')
+    case 'root-copy':
+      return t('已传到设备临时目录，正在用 root 写入目标位置…')
+    case 'send':
+      return progress.fileTotal > 0 ? '' : t('正在上传目录（adb push 不提供进度）…')
+  }
+}
+
+function UploadProgress({ progress }: { progress: UploadState }) {
+  const now = useTicker()
+  const elapsed = (now - progress.startedAt) / 1000
+  const label = phaseLabel(progress)
+  const bytes = progress.phase === 'send' && progress.fileTotal > 0
   const percent = progress.total ? Math.min(100, (progress.sent / progress.total) * 100) : 0
-  const seconds = (Date.now() - progress.startedAt) / 1000
-  const speed = seconds > 0.5 ? progress.sent / seconds : 0
+  const sendSeconds = progress.sendStartedAt ? (now - progress.sendStartedAt) / 1000 : 0
+  const speed = bytes && sendSeconds > 0.5 ? progress.sent / sendSeconds : 0
   const remaining = speed > 0 ? (progress.total - progress.sent) / speed : 0
   const filePercent = progress.fileTotal ? Math.min(100, (progress.fileSent / progress.fileTotal) * 100) : null
 
   return (
-    <div className="upload-progress" role="progressbar" aria-valuenow={Math.round(percent)} aria-valuemin={0} aria-valuemax={100}>
+    <div
+      className="upload-progress"
+      role="progressbar"
+      aria-valuenow={bytes ? Math.round(percent) : undefined}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuetext={label || undefined}
+    >
       <div className="upload-progress-head">
         <span className="mono upload-progress-name" title={progress.name}>
-          {progress.count > 1 && `(${progress.index + 1}/${progress.count}) `}
+          {progress.count > 1 && progress.name && `(${progress.index + 1}/${progress.count}) `}
           {progress.name}
-          {filePercent !== null && progress.count > 1 && ` · ${filePercent.toFixed(0)}%`}
+          {bytes && filePercent !== null && progress.count > 1 && ` · ${filePercent.toFixed(0)}%`}
         </span>
         <span className="mono">
-          {percent.toFixed(0)}% · {formatBytes(progress.sent)} / {formatBytes(progress.total)}
+          {bytes && `${percent.toFixed(0)}% · ${formatBytes(progress.sent)} / ${formatBytes(progress.total)}`}
           {speed > 0 && ` · ${formatRate(speed)}`}
           {speed > 0 && remaining >= 1 && ` · ${t('剩余 {time}', { time: formatDuration(remaining) })}`}
+          {bytes ? ' · ' : ''}
+          {t('已用时 {time}', { time: formatDuration(Math.max(0, elapsed)) })}
         </span>
       </div>
-      <div className="bar">
-        <div className="bar-fill" style={{ width: `${percent}%` }} />
+      <div className={`bar${bytes ? '' : ' indeterminate'}`}>
+        <div className="bar-fill" style={bytes ? { width: `${percent}%` } : undefined} />
       </div>
+      {label && <p className="upload-progress-phase muted">{label}</p>}
     </div>
   )
 }

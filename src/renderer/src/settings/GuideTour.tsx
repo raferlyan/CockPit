@@ -31,6 +31,11 @@ const STEPS = (): TourStep[] => [
     body: t('在手机「开发者选项」中打开「USB 调试」，用数据线连上电脑并在手机上允许调试授权，设备就会出现在这里。点击选中一台设备，右侧和中间区域都会切换到它。')
   },
   {
+    target: 'device-list',
+    title: t('进入 root'),
+    body: t('右键设备可以进入 root，支持免密 su、adb root、用户名 + 密码，以及「su 给出挑战码、用本机解密工具算出密码」四种方式。默认方式在「root 方式设置」里选好后，以后右键直接进入。进入后标记变绿，文件传输、目录浏览也以 root 执行；右键还能直接打开 root 终端。')
+  },
+  {
     target: 'connect',
     title: t('无线连接'),
     body: t('手机开启无线调试后，在这里输入 IP:端口 连接，之后和 USB 设备一样使用。')
@@ -52,7 +57,7 @@ const STEPS = (): TourStep[] => [
     fallback: 'device-detail',
     missing: t('选中一台在线设备后，这里会出现「文件传输」按钮。'),
     title: t('文件传输'),
-    body: t('左边选本机文件，右边选设备目录后上传；设备上的文件也能直接下载到电脑。已 root 的设备访问受保护目录时会自动通过 su 中转。')
+    body: t('左边选本机文件，右边选设备目录后上传，进度条会显示检查目录、获取 root、传输、root 写入每一步。写不进去时会说明是没有 root 还是分区没有 remount，能拿到 root 时一键 remount 后重试。设备上的文件也能直接下载到电脑。')
   },
   {
     target: 'btn-apps',
@@ -83,7 +88,7 @@ const STEPS = (): TourStep[] => [
   {
     target: 'terminal-actions',
     title: t('终端'),
-    body: t('底部可以开多个 adb Shell、Logcat 和串口标签。输入时会提示命令、选项、设备上的包名和历史命令；把文件拖进终端会插入它的路径。Logcat 标签上方可以按级别、Tag、关键字或应用筛选，并导出日志。')
+    body: t('底部可以开多个 adb Shell、Logcat、本机终端和串口标签。本机终端在 Windows 上是 PowerShell，可以直接敲 adb。Shell 里输入时会提示命令、选项、设备上的包名和历史命令；把文件拖进终端会插入它的路径。Logcat 标签上方可以按级别、Tag、关键字或应用筛选，并导出日志。')
   },
   {
     target: 'perfetto',

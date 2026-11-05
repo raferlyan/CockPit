@@ -22,6 +22,10 @@ import type { TraceLibrary } from './trace/TraceLibrary'
 import type { TraceRecorder } from './trace/TraceRecorder'
 import type { TraceRecordOptions } from '@shared/trace'
 import { setLanguage, tm, translateError } from './i18n'
+import type { RootService } from './root/RootService'
+import type { RootSettingsStore } from './root/RootSettingsStore'
+import { runDecryptTool } from './root/decryptTool'
+import type { DecryptToolConfig, RootMethod, RootSettingsUpdate } from '@shared/root'
 
 export function broadcast(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -46,9 +50,15 @@ export function registerIpc(ctx: {
   perfetto: PerfettoUiServer
   traces: TraceLibrary
   recorder?: TraceRecorder
+  root?: RootService
+  rootSettings: RootSettingsStore
   fallbackStatus: AdbStatus
 }): void {
-  const { adb, deviceManager, mirror, shell, metrics, files, apps, serial, perfetto, traces, recorder } = ctx
+  const { adb, deviceManager, mirror, shell, metrics, files, apps, serial, perfetto, traces, recorder, root, rootSettings } = ctx
+  const requireRoot = () => {
+    if (!root) throw new Error('未找到 adb')
+    return root
+  }
   const requireFiles = () => {
     if (!files) throw new Error('未找到 adb')
     return files
@@ -94,7 +104,7 @@ export function registerIpc(ctx: {
 
   handle(IpcChannel.TerminalOpen, (event, serial: string, options: TerminalOpenOptions) => {
     if (!shell) throw new Error('未找到 adb')
-    if (!deviceManager?.list().some((d) => d.serial === serial && d.state === 'device')) throw new Error('设备不在线')
+    if (options?.kind !== 'local' && !deviceManager?.list().some((d) => d.serial === serial && d.state === 'device')) throw new Error('设备不在线')
     return shell.open(event.sender, serial, options)
   })
   handle(IpcChannel.TerminalOpenSerial, (event, options: SerialOptions) => serial.open(event.sender, options))
@@ -133,6 +143,24 @@ export function registerIpc(ctx: {
   })
   ipcMain.on(IpcChannel.FilesCancel, (_e, transferId: string) => transfers.get(transferId)?.controller.abort())
   handle(IpcChannel.FilesDiskUsage, (_e, serial: string, dir: string, asRoot: boolean) => requireFiles().diskUsage(serial, String(dir), Boolean(asRoot)))
+  handle(IpcChannel.FilesRemount, (_e, serial: string, mountPoint: string) => requireFiles().remount(serial, String(mountPoint)))
+  handle(IpcChannel.RootSettingsGet, () => rootSettings.get())
+  handle(IpcChannel.RootSettingsSet, (_e, patch: RootSettingsUpdate) => rootSettings.update(patch ?? {}))
+  handle(IpcChannel.RootEnter, (_e, serial: string, method?: RootMethod) => requireRoot().enter(serial, method))
+  handle(IpcChannel.RootExit, (_e, serial: string) => requireRoot().exit(serial))
+  handle(IpcChannel.RootTestTool, (_e, config: DecryptToolConfig, challenge: string) =>
+    runDecryptTool({ toolPath: String(config?.toolPath ?? ''), toolArgs: String(config?.toolArgs ?? ''), toolStdin: Boolean(config?.toolStdin) }, String(challenge))
+  )
+  handle(IpcChannel.RootPickTool, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const options = {
+      title: tm('选择解密工具'),
+      properties: ['openFile'] as Array<'openFile'>,
+      filters: process.platform === 'win32' ? [{ name: tm('程序'), extensions: ['exe', 'bat', 'cmd'] }, { name: tm('所有文件'), extensions: ['*'] }] : []
+    }
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  })
   handle(IpcChannel.FilesSaveText, async (event, defaultName: string, text: string) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const options = {
@@ -229,6 +257,7 @@ export function registerIpc(ctx: {
     for (const transfer of transfers.values()) if (!online.has(transfer.serial)) transfer.controller.abort()
     mirror?.onDevicesChanged(devices)
     shell?.onDevicesChanged(devices)
+    root?.onDevicesChanged(devices)
     metrics?.onDevicesChanged(devices)
     recorder?.onDevicesChanged(devices)
     broadcast(IpcChannel.DevicesChanged, devices)

@@ -7,6 +7,7 @@ import type { DiskUsage, RemoteEntry, TransferProgressEvent, TransferResult } fr
 import type { AppAction, AppPackage, InstallResult } from './apps'
 import type { ThemeMode } from './theme'
 import type { TraceFile, TraceRecordEvent, TraceRecordOptions, TraceSource } from './trace'
+import type { DecryptToolConfig, RootMethod, RootSettings, RootSettingsUpdate } from './root'
 
 /** 所有 IPC 通道名集中定义，主进程与 preload 共用 */
 export const IpcChannel = {
@@ -45,6 +46,13 @@ export const IpcChannel = {
   FilesCancel: 'files:cancel',
   FilesDiskUsage: 'files:diskUsage',
   FilesSaveText: 'files:saveText',
+  FilesRemount: 'files:remount',
+  RootSettingsGet: 'root:settingsGet',
+  RootSettingsSet: 'root:settingsSet',
+  RootEnter: 'root:enter',
+  RootExit: 'root:exit',
+  RootPickTool: 'root:pickTool',
+  RootTestTool: 'root:testTool',
   AppsPids: 'apps:pids',
   DeviceSaveImage: 'device:saveImage',
   AppSetLanguage: 'app:setLanguage',
@@ -183,6 +191,8 @@ export interface CockpitApi {
     cancel(transferId: string): void
     /** 统计目录下一层各项的占用 */
     diskUsage(serial: string, dir: string, asRoot: boolean): Promise<DiskUsage>
+    /** 把只读分区重新挂载为可写，返回结果说明 */
+    remount(serial: string, mountPoint: string): Promise<string>
     /** 弹出保存对话框把文本写到本机，取消时返回 null */
     saveText(defaultName: string, text: string): Promise<string | null>
     onProgress(listener: (event: TransferProgressEvent) => void): () => void
@@ -191,6 +201,17 @@ export interface CockpitApi {
     pull(serial: string, remotePath: string, localDir: string): Promise<TransferResult>
     /** 在 Finder / 资源管理器中显示 */
     reveal(path: string): void
+  }
+  root: {
+    getSettings(): Promise<RootSettings>
+    setSettings(patch: RootSettingsUpdate): Promise<RootSettings>
+    /** 进入 root，method 为空时用该设备的配置；返回实际使用的方式 */
+    enter(serial: string, method?: RootMethod): Promise<RootMethod>
+    exit(serial: string): Promise<void>
+    /** 系统对话框选择解密工具，取消时返回 null */
+    pickTool(): Promise<string | null>
+    /** 用一个挑战码试运行解密工具，返回它算出的密码 */
+    testTool(config: DecryptToolConfig, challenge: string): Promise<string>
   }
   /** 走主进程的系统剪贴板，不受页面焦点和权限限制 */
   clipboard: {

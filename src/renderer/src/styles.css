@@ -2040,6 +2040,52 @@ body.resizing-row * {
   transition: width 0.15s linear;
 }
 
+/* 检查目录、等 su、root 复制这些阶段没有字节进度，用来回滚动的条表示仍在进行 */
+.upload-progress .bar.indeterminate .bar-fill {
+  width: 30%;
+  transition: none;
+  animation: bar-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes bar-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .upload-progress .bar.indeterminate .bar-fill {
+    animation-duration: 3s;
+  }
+}
+
+.upload-progress-phase {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+.transfer-failure {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--err);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.transfer-failure strong {
+  color: var(--err);
+}
+
+.transfer-failure p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
 /* ---------- 网卡 ---------- */
 
 .proc-table .dot {
@@ -2770,4 +2816,129 @@ body.resizing-row * {
 .storage-entry-term-spacer {
   flex: none;
   width: 26px;
+}
+
+/* ---------- root ---------- */
+
+.device-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 220px;
+}
+
+.context-menu-title {
+  padding: 4px 10px 6px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.context-menu-group {
+  padding: 4px 10px 2px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.context-menu button.indent {
+  padding-left: 22px;
+}
+
+.context-menu hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 4px 0;
+}
+
+.root-dialog {
+  width: 620px;
+}
+
+.root-methods {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.root-method {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.root-method.on {
+  border-color: var(--accent);
+}
+
+.root-method input {
+  margin-top: 2px;
+}
+
+.root-method span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.root-method small {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.root-section {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px 4px;
+  margin: 0 0 12px;
+}
+
+.root-section legend {
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+.field-grid.two {
+  grid-template-columns: 1fr 1fr;
+}
+
+.root-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.root-hint .link {
+  margin-left: 6px;
+}
+
+.root-section .check {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.root-test p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.root-test-ok {
+  color: var(--ok, var(--accent));
+}
+
+.transfer-failure button {
+  margin-top: 8px;
+}
+
+@media (max-width: 680px) {
+  .root-methods,
+  .field-grid.two {
+    grid-template-columns: 1fr;
+  }
 }

@@ -58,8 +58,10 @@ interface Popup {
 }
 
 /** 拖进终端的路径带空格等特殊字符时加单引号 */
-function quotePath(path: string): string {
-  return /^[\w@%+=:,./\\-]+$/.test(path) ? path : `'${path.replace(/'/g, `'\\''`)}'`
+function quotePath(path: string, powershell = false): string {
+  if (/^[\w@%+=:,./\\-]+$/.test(path)) return path
+  // PowerShell 的单引号字符串里用两个单引号表示一个
+  return powershell ? `'${path.replace(/'/g, "''")}'` : `'${path.replace(/'/g, `'\\''`)}'`
 }
 
 /**
@@ -111,7 +113,7 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
       fontFamily: terminalFontStack(useSettingsStore.getState().terminalFont, useSettingsStore.getState().monoFont),
       fontSize: useSettingsStore.getState().terminalFontSize,
       theme: THEMES[useThemeStore.getState().resolved],
-      cursorBlink: tab.kind === 'shell',
+      cursorBlink: tab.kind === 'shell' || tab.kind === 'local',
       disableStdin: tab.kind === 'logcat',
       // 每行约占 列数×12 字节，120 列时 1 万行约 14 MB；logcat 刷屏快多留一些，shell 够翻看最近输出即可
       scrollback: tab.kind === 'logcat' ? 10_000 : 3_000,
@@ -143,7 +145,8 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
     const updateSuggestions = () => {
       frame = 0
       const line = readInputLine(term)
-      const items = line === null ? [] : suggest(line, { history: getHistory(), packages: tab.serial ? getPackages(tab.serial) : [] })
+      // 补全规则是给设备 shell 的，本机终端不提示
+      const items = line === null || tab.kind === 'local' ? [] : suggest(line, { history: getHistory(), packages: tab.serial ? getPackages(tab.serial) : [] })
       if (!items.length) return showPopup(null)
       const screen = term.element?.querySelector('.xterm-screen')
       if (!screen) return
@@ -352,7 +355,8 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
         if (!interactive || !paths.length) return
         e.preventDefault()
         // 插入到光标处，末尾留空格方便继续输入
-        termRef.current?.term.paste(`${paths.map(quotePath).join(' ')} `)
+        const powershell = tab.kind === 'local' && api.platform === 'win32'
+        termRef.current?.term.paste(`${paths.map((p) => quotePath(p, powershell)).join(' ')} `)
         termRef.current?.term.focus()
       }}
     >
