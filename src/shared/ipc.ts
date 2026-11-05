@@ -1,5 +1,5 @@
 import type { MetricsEvent, MetricsSnapshot } from './metrics'
-import type { ControlInput, MirrorEvent, MirrorOptions, MirrorSessionInfo } from './mirror'
+import type { ControlInput, MirrorEvent, MirrorOptions, MirrorSessionInfo, RecordingInfo } from './mirror'
 import type { AdbStatus, Device } from './models'
 import type { TerminalEvent, TerminalOpenOptions, TerminalSessionInfo } from './terminal'
 import type { SerialOptions, SerialPortInfo } from './serial'
@@ -24,6 +24,8 @@ export const IpcChannel = {
   MirrorStop: 'mirror:stop',
   MirrorControl: 'mirror:control',
   MirrorEvent: 'mirror:event',
+  MirrorRecordStart: 'mirror:recordStart',
+  MirrorRecordStop: 'mirror:recordStop',
   /** 主进程 → 渲染进程，携带视频 MessagePort */
   MirrorPort: 'mirror:port',
   TerminalOpen: 'terminal:open',
@@ -116,6 +118,9 @@ export interface CockpitApi {
     /** 高频调用（鼠标移动），不等待结果 */
     control(sessionId: string, input: ControlInput): void
     onEvent(listener: (event: MirrorEvent) => void): () => void
+    /** 开始录屏，保存到「影片/Cockpit」 */
+    startRecording(sessionId: string): Promise<{ startedAt: number }>
+    stopRecording(sessionId: string): Promise<RecordingInfo>
   }
   app: {
     onError(listener: (message: string) => void): () => void

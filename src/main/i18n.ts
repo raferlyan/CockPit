@@ -76,6 +76,9 @@ const PHRASES: Array<[string, string]> = [
   ['（su 输出：', ' (su output: '],
   ['超时（', ' timed out ('],
   ['[Cockpit] 进入 root 失败：', '[Cockpit] Failed to enter root: '],
+  ['投屏已结束', 'Mirroring has ended'],
+  ['已经在录屏了', 'Already recording'],
+  ['当前没有在录屏', 'Not recording'],
   ['（设备没有可用的 su，无法提权访问）', ' (no usable su on the device, cannot elevate)'],
   [
     'adbd 已是 root，但该分区还没有 remount。请执行 adb remount；如果提示需要关闭 verity，先执行 adb disable-verity 并重启设备，再执行 adb root && adb remount',

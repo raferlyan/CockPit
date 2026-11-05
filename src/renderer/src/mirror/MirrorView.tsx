@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
-import type { ControlInput, MirrorOptions, MirrorSessionInfo } from '@shared/mirror'
+import type { ControlInput, MirrorOptions, MirrorSessionInfo, RecordingInfo } from '@shared/mirror'
 import type { Device } from '@shared/models'
 import { api } from '../api'
 import { ActionButton } from '../notify/ActionButton'
@@ -11,6 +11,7 @@ import type { WorkerInbound, WorkerOutbound } from './decoder.worker'
 import { droppedPaths, handleDeviceDrop, hasDraggedFiles } from '../files/fileStore'
 import { takeScreenshot } from '../apps/screenshot'
 import { t } from '../i18n'
+import { formatBytes } from '../metrics/format'
 
 type ViewState = 'idle' | 'starting' | 'running' | 'error'
 interface Size {
@@ -62,6 +63,12 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
   /** 每次开始/停止/卸载加一；启动返回时代数已变说明期间被取消，要把刚建好的会话停掉 */
   const startGenRef = useRef(0)
   const [dropping, setDropping] = useState(false)
+  /** 正在录屏时为开始时间 */
+  const [recordingSince, setRecordingSince] = useState<number | null>(null)
+  /** 刚保存的录屏，工具栏上短暂显示「打开录屏」 */
+  const [savedFile, setSavedFile] = useState<string | null>(null)
+  const recordingRef = useRef(false)
+  recordingRef.current = recordingSince !== null
 
   const send = useCallback((input: ControlInput) => {
     const id = sessionIdRef.current
@@ -113,7 +120,13 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
   useEffect(
     () =>
       api.mirror.onEvent((event) => {
-        if (event.sessionId !== sessionIdRef.current || event.type !== 'state') return
+        if (event.sessionId !== sessionIdRef.current) return
+        if (event.type === 'recording') {
+          setRecordingSince(event.recording ? (event.startedAt ?? Date.now()) : null)
+          if (!event.recording && event.result) announceRecording(event.result, setSavedFile)
+          return
+        }
+        if (event.type !== 'state') return
         if (event.state === 'stopped') teardown('idle')
         if (event.state === 'error') {
           notify('error', t('投屏中断'), event.error)
@@ -134,6 +147,16 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
     () => () => {
       startGenRef.current++
       const id = sessionIdRef.current
+      // 录屏中关掉窗格：先保存录屏再结束投屏
+      if (id && recordingRef.current) {
+        void api.mirror
+          .stopRecording(id)
+          .then((result) => announceRecording(result, () => undefined))
+          .catch(() => undefined)
+          .finally(() => api.mirror.stop(id))
+        workerRef.current?.terminate()
+        return
+      }
       if (id) void api.mirror.stop(id)
       workerRef.current?.terminate()
     },
@@ -398,6 +421,21 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
           <ToolButton label={t(t('通知栏'))} short={t(t('通知'))} disabledReason={keysDisabled} onClick={() => send({ type: 'expandNotificationPanel' })} />
           <ToolButton label={t(t('旋转'))} short="⟳" disabledReason={keysDisabled} onClick={() => send({ type: 'rotateDevice' })} />
           <ToolButton label={t(t('截图'))} short="📷" onClick={() => void takeScreenshot(device)} />
+          <RecordButton
+            since={recordingSince}
+            disabledReason={keysDisabled}
+            onToggle={() => {
+              const id = sessionIdRef.current
+              if (!id) return
+              const action = recordingSince ? api.mirror.stopRecording(id) : api.mirror.startRecording(id)
+              void action.catch((error) => notify('error', recordingSince ? t('结束录屏失败') : t('开始录屏失败'), errorMessage(error)))
+            }}
+          />
+          {savedFile && !recordingSince && (
+            <button className="link mirror-saved" title={savedFile} onClick={() => api.files.reveal(savedFile)}>
+              {t('打开录屏')}
+            </button>
+          )}
         </div>
         {running || state === 'starting' ? (
           <ActionButton className="secondary" onClick={stop} disabledReason={state === 'starting' && STARTING_REASON()}>
@@ -462,6 +500,44 @@ interface ToolButtonProps {
   short: string
   onClick(): void
   disabledReason?: string | false
+}
+
+/** 录屏开关：录制中显示红点和已录时长 */
+function RecordButton({ since, onToggle, disabledReason }: { since: number | null; onToggle(): void; disabledReason?: string | false }) {
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    if (!since) return
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 500)
+    return () => clearInterval(timer)
+  }, [since])
+  if (!since) return <ToolButton label={t('录屏')} short="⏺" disabledReason={disabledReason} onClick={onToggle} />
+  const seconds = Math.max(0, Math.floor((now - since) / 1000))
+  const clock = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
+  return (
+    <button className="tool mirror-recording" title={t('点击结束录屏并保存')} onClick={onToggle} onMouseDown={(e) => e.preventDefault()}>
+      <span className="rec-dot" aria-hidden />
+      <span className="mono">{clock}</span>
+      <span className="label-full">{t('结束录屏')}</span>
+    </button>
+  )
+}
+
+function formatClip(ms: number): string {
+  const s = Math.round(ms / 1000)
+  return s < 60 ? t('{s} 秒', { s }) : t('{m} 分 {s} 秒', { m: Math.floor(s / 60), s: s % 60 })
+}
+
+/** 录屏保存后提示文件位置；没等到关键帧时说明原因 */
+function announceRecording(result: RecordingInfo, setSaved: (path: string | null) => void): void {
+  if (!result.files.length) {
+    notify('warn', t('没有录到画面'), t('录屏太短，还没收到关键帧就结束了'))
+    return
+  }
+  const parts = result.files.length > 1 ? t('（设备旋转，分成 {n} 段）', { n: result.files.length }) : ''
+  notify('success', t('录屏已保存{parts}', { parts }), `${result.files.join('\n')}\n${formatClip(result.durationMs)} · ${formatBytes(result.bytes)}`)
+  setSaved(result.files[0])
+  setTimeout(() => setSaved(null), 15_000)
 }
 
 function ToolButton({ label, short, onClick, disabledReason }: ToolButtonProps) {

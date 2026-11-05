@@ -76,6 +76,15 @@ export type ControlInput =
 
 export type MirrorState = 'starting' | 'running' | 'stopped' | 'error'
 
+/** 录屏结果：分辨率变化时会分成多个文件 */
+export interface RecordingInfo {
+  files: string[]
+  durationMs: number
+  bytes: number
+}
+
 export type MirrorEvent =
   | { sessionId: string; type: 'state'; state: MirrorState; error?: string }
+  /** 录屏开始或结束；投屏中断时也会自动结束并保存 */
+  | { sessionId: string; type: 'recording'; recording: boolean; startedAt?: number; result?: RecordingInfo }
   | { sessionId: string; type: 'clipboard'; text: string }

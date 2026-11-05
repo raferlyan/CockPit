@@ -31,7 +31,9 @@ const api: CockpitApi = {
     start: (serial, options) => ipcRenderer.invoke(IpcChannel.MirrorStart, serial, options),
     stop: (sessionId) => ipcRenderer.invoke(IpcChannel.MirrorStop, sessionId),
     control: (sessionId, input) => ipcRenderer.send(IpcChannel.MirrorControl, sessionId, input),
-    onEvent: (listener) => subscribe(IpcChannel.MirrorEvent, listener)
+    onEvent: (listener) => subscribe(IpcChannel.MirrorEvent, listener),
+    startRecording: (sessionId) => ipcRenderer.invoke(IpcChannel.MirrorRecordStart, sessionId),
+    stopRecording: (sessionId) => ipcRenderer.invoke(IpcChannel.MirrorRecordStop, sessionId)
   },
   app: {
     onError: (listener) => subscribe(IpcChannel.AppError, listener),

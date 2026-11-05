@@ -110,6 +110,14 @@ export function registerIpc(ctx: {
     return mirror.start(event.sender, serial, options)
   })
   handle(IpcChannel.MirrorStop, (_e, sessionId: string) => mirror?.stop(sessionId))
+  handle(IpcChannel.MirrorRecordStart, (_e, sessionId: string) => {
+    if (!mirror) throw new Error('未找到 adb')
+    return mirror.startRecording(String(sessionId))
+  })
+  handle(IpcChannel.MirrorRecordStop, (_e, sessionId: string) => {
+    if (!mirror) throw new Error('未找到 adb')
+    return mirror.stopRecording(String(sessionId))
+  })
   ipcMain.on(IpcChannel.MirrorControl, (_e, sessionId: string, input: ControlInput) => mirror?.control(sessionId, input))
 
   handle(IpcChannel.TerminalOpen, (event, serial: string, options: TerminalOpenOptions) => {

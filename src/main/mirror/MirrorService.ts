@@ -1,15 +1,30 @@
 import { randomUUID } from 'node:crypto'
-import { clipboard, MessageChannelMain, type WebContents } from 'electron'
-import type { ControlInput, MirrorEvent, MirrorOptions, MirrorSessionInfo } from '@shared/mirror'
+import { mkdir } from 'node:fs/promises'
+import { join } from 'node:path'
+import { app, clipboard, MessageChannelMain, type WebContents } from 'electron'
+import type { ControlInput, MirrorEvent, MirrorOptions, MirrorSessionInfo, RecordingInfo } from '@shared/mirror'
 import type { Device } from '@shared/models'
 import { IpcChannel } from '@shared/ipc'
 import type { AdbClient } from '../adb/AdbClient'
 import { MirrorSession } from './MirrorSession'
+import { ScreenRecorder } from './ScreenRecorder'
 import { watchOwner } from '../util/ownerLifetime'
 
 interface Entry {
   session: MirrorSession
   owner: WebContents
+  recorder?: ScreenRecorder
+}
+
+/** 文件名里不能出现的字符 */
+function safeName(text: string): string {
+  return text.replace(/[\\/:*?"<>|\s]+/g, '_').replace(/^_+|_+$/g, '') || 'device'
+}
+
+function timestamp(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
 }
 
 /**
@@ -34,7 +49,10 @@ export class MirrorService {
 
     // 先把端口交给渲染进程，避免丢失握手后的第一批视频消息
     owner.postMessage(IpcChannel.MirrorPort, { sessionId }, [port2])
-    session.on('video', (message) => port1.postMessage(message))
+    session.on('video', (message) => {
+      port1.postMessage(message)
+      this.sessions.get(sessionId)?.recorder?.push(message)
+    })
     session.on('clipboard', (text) => {
       void (async () => {
         if ((await clipboard.readText()) !== text) await clipboard.writeText(text)
@@ -44,6 +62,8 @@ export class MirrorService {
     const unwatch = watchOwner(owner, () => session.stop())
     session.on('closed', (error) => {
       unwatch()
+      // 投屏中断时把录了的部分保存下来
+      this.finishRecording(sessionId)
       this.sessions.delete(sessionId)
       port1.close()
       this.emit(owner, { sessionId, type: 'state', state: error ? 'error' : 'stopped', error: error?.message })
@@ -56,6 +76,41 @@ export class MirrorService {
 
   stop(sessionId: string): void {
     this.sessions.get(sessionId)?.session.stop()
+  }
+
+  /**
+   * 开始录屏：直接把投屏收到的 H.264 码流封装成 MP4，保存到「影片/Cockpit」。
+   * 请求一个关键帧，录制从它开始。
+   */
+  async startRecording(sessionId: string): Promise<{ startedAt: number }> {
+    const entry = this.sessions.get(sessionId)
+    if (!entry) throw new Error('投屏已结束')
+    if (entry.recorder) throw new Error('已经在录屏了')
+    const dir = join(app.getPath('videos'), 'Cockpit')
+    await mkdir(dir, { recursive: true })
+    const name = `${safeName(entry.session.deviceName || entry.session.serial)}_${timestamp()}`
+    entry.recorder = new ScreenRecorder(join(dir, name))
+    entry.session.sendControl({ type: 'resetVideo' })
+    const startedAt = Date.now()
+    this.emit(entry.owner, { sessionId, type: 'recording', recording: true, startedAt })
+    return { startedAt }
+  }
+
+  /** 结束录屏，返回保存的文件 */
+  stopRecording(sessionId: string): RecordingInfo {
+    const result = this.finishRecording(sessionId)
+    if (!result) throw new Error('当前没有在录屏')
+    return result
+  }
+
+  private finishRecording(sessionId: string): RecordingInfo | undefined {
+    const entry = this.sessions.get(sessionId)
+    const recorder = entry?.recorder
+    if (!entry || !recorder) return undefined
+    entry.recorder = undefined
+    const result = recorder.stop()
+    this.emit(entry.owner, { sessionId, type: 'recording', recording: false, result })
+    return result
   }
 
   control(sessionId: string, input: ControlInput): void {
@@ -79,6 +134,7 @@ export class MirrorService {
   }
 
   dispose(): void {
+    for (const id of this.sessions.keys()) this.finishRecording(id)
     for (const { session } of this.sessions.values()) session.stop()
   }
 

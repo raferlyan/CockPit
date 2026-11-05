@@ -858,4 +858,13 @@ export const en: Record<string, string> = {
   "检查 adbd 是否为 root": "Check whether adbd is root",
   "检查能否免密 su": "Check for password-free su",
   "以 root 执行": "Run as root",
+  "点击结束录屏并保存": "Click to stop recording and save",
+  "结束录屏": "Stop recording",
+  "结束录屏失败": "Failed to stop recording",
+  "开始录屏失败": "Failed to start recording",
+  "打开录屏": "Show recording",
+  "没有录到画面": "Nothing was recorded",
+  "录屏太短，还没收到关键帧就结束了": "The recording ended before the first keyframe arrived",
+  "（设备旋转，分成 {n} 段）": " (split into {n} parts because the device rotated)",
+  "录屏已保存{parts}": "Recording saved{parts}",
 }
