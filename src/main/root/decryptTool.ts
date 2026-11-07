@@ -1,8 +1,44 @@
 import { execFile } from 'node:child_process'
+import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import type { DecryptToolConfig } from '@shared/root'
 import { formatCommand, recordCommand } from '../oplog/OperationLog'
 
 const TOOL_TIMEOUT = 20_000
+
+/** 工具所在目录不可写时的工作目录，主进程启动后改到用户数据目录（不会被系统清理） */
+let fallbackWorkDir = join(tmpdir(), 'cockpit-decrypt-tool')
+export function setDecryptToolFallbackDir(dir: string): void {
+  fallbackWorkDir = dir
+}
+
+/** 真正写一个文件试试：Windows 上 Program Files 的权限 access() 检查不出来 */
+function writable(dir: string): boolean {
+  const probe = join(dir, `.cockpit-probe-${process.pid}-${Date.now()}`)
+  try {
+    writeFileSync(probe, '')
+    unlinkSync(probe)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 解密工具常把 access_token 之类的缓存写到「当前目录」。双击运行时当前目录是工具所在目录，
+ * 这里保持一致；那里不可写（比如装在 Program Files）就换到 Cockpit 自己的可写目录。
+ * 不指定的话会继承 Cockpit 的当前目录（安装目录或 /），写文件就会失败。
+ */
+export function toolWorkDir(toolPath: string): string {
+  const own = dirname(toolPath)
+  if (writable(own)) return own
+  mkdirSync(fallbackWorkDir, { recursive: true })
+  return fallbackWorkDir
+}
+
+/** 工具没有返回错误码、却把失败原因打印在最后一行时，不能把它当密码填进去 */
+const FAILURE_TEXT = /失败|错误|异常|无法|不能|拒绝|过期|error|fail|exception|denied|invalid|expired|unauthori[sz]ed/i
 
 /** 按空白拆参数，双引号括起来的部分保持完整；{challenge} 换成挑战码 */
 export function buildToolArgs(template: string, challenge: string): string[] {
@@ -30,12 +66,18 @@ export function runDecryptTool(config: DecryptToolConfig, challenge: string): Pr
   if (!config.toolArgs.includes('{challenge}') && !config.toolStdin) args = [...args, challenge]
   // .bat / .cmd 要经过 cmd.exe 才能运行
   const viaShell = process.platform === 'win32' && /\.(bat|cmd)$/i.test(toolPath)
-  recordCommand(formatCommand(toolPath, args), config.toolStdin ? '本机解密工具，挑战码同时写入标准输入' : '本机解密工具')
+  let cwd: string
+  try {
+    cwd = toolWorkDir(toolPath)
+  } catch (error) {
+    return Promise.reject(new Error(`解密工具运行失败：找不到可写的工作目录（${(error as Error).message}）`))
+  }
+  recordCommand(`cd ${formatCommand(cwd, [])} && ${formatCommand(toolPath, args)}`, config.toolStdin ? '本机解密工具，挑战码同时写入标准输入' : '本机解密工具')
   return new Promise((resolve, reject) => {
     const child = execFile(
       toolPath,
       args,
-      { timeout: TOOL_TIMEOUT, windowsHide: true, shell: viaShell, maxBuffer: 1024 * 1024 },
+      { cwd, timeout: TOOL_TIMEOUT, windowsHide: true, shell: viaShell, maxBuffer: 1024 * 1024 },
       (error, stdout, stderr) => {
         if (error) {
           const reason = error.killed
@@ -48,6 +90,8 @@ export function runDecryptTool(config: DecryptToolConfig, challenge: string): Pr
         }
         const password = parseToolOutput(stdout)
         if (!password) reject(new Error(`解密工具没有输出密码${stderr.trim() ? `：${stderr.trim()}` : ''}`))
+        else if (FAILURE_TEXT.test(password) || /\s/.test(password))
+          reject(new Error(`解密工具报错：${password}${stderr.trim() ? `（${stderr.trim()}）` : ''}。工作目录：${cwd}`))
         else resolve(password)
       }
     )

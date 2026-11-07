@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { writeFile } from 'node:fs/promises'
-import { BrowserWindow, clipboard, dialog, ipcMain, shell as electronShell, type IpcMainInvokeEvent } from 'electron'
+import { join } from 'node:path'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell as electronShell, type IpcMainInvokeEvent } from 'electron'
 import { IpcChannel } from '@shared/ipc'
 import type { AdbStatus } from '@shared/models'
 import type { AdbClient } from './adb/AdbClient'
@@ -24,7 +25,7 @@ import type { TraceRecordOptions } from '@shared/trace'
 import { setLanguage, tm, translateError } from './i18n'
 import type { RootService } from './root/RootService'
 import type { RootSettingsStore } from './root/RootSettingsStore'
-import { runDecryptTool } from './root/decryptTool'
+import { runDecryptTool, setDecryptToolFallbackDir } from './root/decryptTool'
 import type { OperationLog } from './oplog/OperationLog'
 import { failureOf, OPERATIONS } from './oplog/operations'
 import type { DecryptToolConfig, RootMethod, RootSettingsUpdate } from '@shared/root'
@@ -58,6 +59,7 @@ export function registerIpc(ctx: {
   fallbackStatus: AdbStatus
 }): void {
   const { adb, deviceManager, mirror, shell, metrics, files, apps, serial, perfetto, traces, recorder, root, rootSettings, oplog } = ctx
+  setDecryptToolFallbackDir(join(app.getPath('userData'), 'decrypt-tool'))
   const requireRoot = () => {
     if (!root) throw new Error('未找到 adb')
     return root

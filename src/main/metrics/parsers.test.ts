@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  parseAccelerators,
   cpuUsage,
   loadCommand,
   parseBattery,
@@ -171,5 +172,62 @@ describe('parseDf', () => {
       { mount: '/data', sizeKB: 233595404, usedKB: 28882092, availKB: 204172640 },
       { mount: '/', sizeKB: 3444116, usedKB: 3283976, availKB: 143756 }
     ])
+  })
+})
+
+describe('parseAccelerators', () => {
+  it('reads Adreno usage and converts Hz', () => {
+    expect(parseAccelerators('uid=0\ngpu_present=1\ngpu_busy=37 %\ngpu_ratio=1 2\ngpu_freq=585000000\ngpu_model=Adreno640v2\n').gpu).toEqual({
+      access: 'ok',
+      busy: 37,
+      freqMHz: 585,
+      model: 'Adreno640v2'
+    })
+  })
+
+  it('falls back to the gpubusy window, idle reads as 0', () => {
+    expect(parseAccelerators('uid=0\ngpu_ratio=250 1000\n').gpu?.busy).toBe(25)
+    expect(parseAccelerators('uid=0\ngpu_ratio=0 0\n').gpu?.busy).toBe(0)
+  })
+
+  it('understands devfreq load and kHz', () => {
+    expect(parseAccelerators('uid=0\ngpu_busy=25@400000000Hz\ngpu_freq=400000\n').gpu).toMatchObject({ busy: 25, freqMHz: 400 })
+  })
+
+  it('reads a Rockchip board: devfreq GPU and rknpu', () => {
+    // 真机读数（节点格式来自用户的 Rockchip 板子）
+    const { gpu, npu } = parseAccelerators('uid=0\ngpu_present=1\ngpu_busy=0@300000000Hz\ngpu_freq=300000000\nnpu_present=1\nnpu_busy=NPU load: 0%\nnpu_freq=1000000000\n')
+    expect(gpu).toEqual({ access: 'ok', busy: 0, freqMHz: 300 })
+    expect(npu).toEqual({ access: 'ok', busy: 0, freqMHz: 1000 })
+  })
+
+  it('keeps the tile with a reason when a devfreq GPU cannot be read', () => {
+    expect(parseAccelerators('uid=2000\ngpu_present=1\n').gpu).toEqual({ access: 'needs-root' })
+  })
+
+  it('averages per-core rknpu load', () => {
+    expect(parseAccelerators('uid=0\nnpu_present=1\nnpu_busy=NPU load:  Core0: 10%, Core1: 30%, Core2:  2%,\n').npu).toMatchObject({
+      access: 'ok',
+      busy: 14,
+      cores: [10, 30, 2]
+    })
+  })
+
+  it('says root is needed when shell cannot read present nodes', () => {
+    const { gpu, npu } = parseAccelerators('uid=2000\ngpu_present=1\nnpu_present=1\ngpu_model=Adreno640v2\n')
+    expect(gpu).toEqual({ access: 'needs-root', model: 'Adreno640v2' })
+    expect(npu).toEqual({ access: 'needs-root' })
+  })
+
+  it('reports no driver data when root still cannot read it', () => {
+    expect(parseAccelerators('uid=0\nnpu_present=1\n').npu).toEqual({ access: 'unavailable' })
+  })
+
+  it('hides an NPU the device does not have', () => {
+    expect(parseAccelerators('uid=2000\ngpu_present=1\n').npu).toBeUndefined()
+  })
+
+  it('does not treat an impossible reading as usage', () => {
+    expect(parseAccelerators('uid=0\ngpu_busy=250\n').gpu).toEqual({ access: 'unavailable' })
   })
 })

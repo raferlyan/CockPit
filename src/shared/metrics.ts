@@ -30,6 +30,25 @@ export interface LoadSample {
    */
   net?: { rxBps: number; txBps: number; ifaces: NetIface[] }
   loadavg?: [number, number, number]
+  gpu?: AcceleratorLoad
+  /** 设备没有 NPU 节点时为 undefined */
+  npu?: AcceleratorLoad
+}
+
+/**
+ * GPU / NPU 负载。这些节点没有统一标准，且多数量产机只允许 root 读取：
+ * - ok：读到了占用率
+ * - needs-root：当前不是 root，读不到，进入 root 后可能可以
+ * - unavailable：已经是 root 仍读不到，驱动没有提供占用数据
+ */
+export interface AcceleratorLoad {
+  access: 'ok' | 'needs-root' | 'unavailable'
+  /** 占用 0–100；多核为平均值 */
+  busy?: number
+  /** 每核占用，只有驱动分核上报时才有 */
+  cores?: number[]
+  freqMHz?: number
+  model?: string
 }
 
 export interface NetIface {

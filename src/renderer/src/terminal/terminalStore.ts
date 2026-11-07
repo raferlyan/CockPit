@@ -6,6 +6,8 @@ import { errorMessage, notify } from '../notify/notifyStore'
 import { useSettingsStore } from '../settings/settingsStore'
 import { t } from '../i18n'
 import { DEFAULT_FILTER, dropLogcatBuffer, type LogcatFilter } from './logcat'
+import { useAppStore } from '../store'
+import { activeAfterClose, replaceActive } from './tabScope'
 
 export interface TerminalTab {
   id: string
@@ -26,7 +28,8 @@ export interface TerminalTab {
 
 interface TerminalState {
   tabs: TerminalTab[]
-  activeId: string | null
+  /** 每台设备当前看的标签，键是序列号（没有选中设备时为空串）；用 activeTabId 取值 */
+  activeBy: Record<string, string>
   /** initialInput：打开后立即输入的内容，如 `cd /data/app\r` */
   open(serial: string, kind: Exclude<TerminalKind, 'serial'>, logcatArgs?: string, initialInput?: string): Promise<void>
   /** 打开一个自动切到 root 的设备终端 */
@@ -37,6 +40,7 @@ interface TerminalState {
   close(id: string): void
   /** 已退出的标签原地重开，保留位置 */
   reopen(id: string): Promise<void>
+  /** 把当前设备下显示的标签切到 id */
   activate(id: string): void
   setLogcatFilter(id: string, patch: Partial<LogcatFilter>): void
   setPaused(id: string, paused: boolean): void
@@ -64,7 +68,11 @@ export const useTerminalStore = create<TerminalState>((set, get) => {
     try {
       const info = await startSession(config)
       const tab: TerminalTab = { ...config, id: info.id, identity: 'unknown', logcatFilter: config.kind === 'logcat' ? DEFAULT_FILTER : undefined }
-      set((s) => ({ tabs: [...s.tabs, tab], activeId: tab.id }))
+      // 设备标签只在那台设备下显示：从右键菜单给别的设备开终端时，要切过去才看得到
+      const app = useAppStore.getState()
+      if (config.serial && config.serial !== app.focusedSerial) app.focus(config.serial)
+      const scope = config.serial || (useAppStore.getState().focusedSerial ?? '')
+      set((s) => ({ tabs: [...s.tabs, tab], activeBy: { ...s.activeBy, [scope]: tab.id } }))
       // 终端收起时展开，新标签能直接看到
       useSettingsStore.getState().toggleCollapsed('terminal', false)
       if (initialInput) queueInput(info.id, initialInput)
@@ -77,7 +85,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => {
 
   return {
     tabs: [],
-    activeId: null,
+    activeBy: {},
     open: async (serial, kind, logcatArgs, initialInput) => {
       await add({ serial, kind, logcatArgs }, initialInput)
     },
@@ -88,12 +96,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => {
     close: (id) => {
       void api.terminal.close(id)
       dropLogcatBuffer(id)
-      set((s) => {
-        const index = s.tabs.findIndex((t) => t.id === id)
-        const tabs = s.tabs.filter((t) => t.id !== id)
-        const activeId = s.activeId === id ? (tabs[Math.min(index, tabs.length - 1)]?.id ?? null) : s.activeId
-        return { tabs, activeId }
-      })
+      set((s) => ({ tabs: s.tabs.filter((t) => t.id !== id), activeBy: activeAfterClose(s.tabs, id, s.activeBy) }))
     },
     reopen: async (id) => {
       const old = get().tabs.find((t) => t.id === id)
@@ -102,12 +105,12 @@ export const useTerminalStore = create<TerminalState>((set, get) => {
         const info = await startSession(old)
         dropLogcatBuffer(id)
         const tab: TerminalTab = { ...old, id: info.id, identity: 'unknown', exit: undefined }
-        set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? tab : t)), activeId: tab.id }))
+        set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? tab : t)), activeBy: replaceActive(s.activeBy, id, tab.id) }))
       } catch (error) {
         notify('error', FAILED_TITLE()[old.kind], errorMessage(error))
       }
     },
-    activate: (activeId) => set({ activeId }),
+    activate: (id) => set((s) => ({ activeBy: { ...s.activeBy, [useAppStore.getState().focusedSerial ?? '']: id } })),
     setLogcatFilter: (id, patch) =>
       set((s) => ({ tabs: s.tabs.map((tab) => (tab.id === id ? { ...tab, logcatFilter: { ...(tab.logcatFilter ?? DEFAULT_FILTER), ...patch } } : tab)) })),
     setPaused: (id, paused) => set((s) => ({ tabs: s.tabs.map((tab) => (tab.id === id ? { ...tab, paused } : tab)) }))

@@ -101,7 +101,14 @@ async function bootstrap(): Promise<void> {
     )
     rootService = roots
     shellService = new ShellService(adbPath, (serial, root) => devices.setShellRoot(serial, root), roots)
-    metrics = new MetricsService(adb, (event) => broadcast(IpcChannel.MetricsEvent, event))
+    metrics = new MetricsService(
+      adb,
+      (event) => broadcast(IpcChannel.MetricsEvent, event),
+      (serial) => {
+        const session = roots.session(serial)
+        return session ? (command, timeout) => session.exec(command, timeout, false) : undefined
+      }
+    )
     files = new FileService(adb, (serial) => roots.session(serial))
     apps = new AppService(adb)
   }

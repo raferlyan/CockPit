@@ -88,7 +88,7 @@ const STEPS = (): TourStep[] => [
   {
     target: 'terminal-actions',
     title: t('终端'),
-    body: t('底部可以开多个 adb Shell、Logcat、本机终端和串口标签。本机终端在 Windows 上是 PowerShell，可以直接敲 adb。Shell 里输入时会提示命令、选项、设备上的包名和历史命令；把文件拖进终端会插入它的路径。Logcat 标签上方可以按级别、Tag、关键字或应用筛选，并导出日志。')
+    body: t('底部的终端可以开多个标签：点标签右边的 + 打开设备 Shell，点旁边的下拉箭头可以选 Logcat、本机终端和串口。本机终端在 Windows 上是 PowerShell，可以直接敲 adb。Shell 里输入时会提示命令、选项、设备上的包名和历史命令；把文件拖进终端会插入它的路径。Logcat 标签上方可以按级别、Tag、关键字或应用筛选，并导出日志。')
   },
   {
     target: 'oplog',

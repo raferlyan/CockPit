@@ -27,7 +27,7 @@
 | Before | With Cockpit |
 |---|---|
 | scrcpy in a separate window | Mirroring embedded in the main window, up to 4 devices at once |
-| Remembering serials and typing `adb -s <serial> shell` for each device | Pick a device and click "+ Shell"; the tab shows the device name and serial |
+| Remembering serials and typing `adb -s <serial> shell` for each device | Pick a device and click "+" in the terminal; each device has its own set of terminal tabs |
 | Cycling through `top`, `dumpsys battery`, `cat /sys/class/thermal/…` | CPU, memory, temperature, battery, network, processes and storage refreshed every second, with 5-minute charts |
 | Forgetting `pm` / `am` / `dumpsys` subcommands and package names | Suggestions as you type: commands, options, packages installed on the device, and your history |
 | Typing paths for `adb push` / `adb pull` | Drop files in, pick a device folder and upload; download device files with one click |
@@ -52,6 +52,7 @@ Click "Mirror" on the right and the device screen takes the middle while status 
 ## Device status: see what's eating resources at a glance
 
 - Total CPU usage and `loadavg`, per-core usage and current frequency, with offline cores marked
+- GPU and NPU usage and frequency (nodes vary by chip and most retail devices need root to read them; the reason is shown when they cannot be read)
 - Memory and swap / ZRAM, CPU / GPU / battery / skin temperature, battery level, voltage and charging state
 - Network throughput, top 10 processes, storage usage per partition
 - Charts cover the last 5 minutes; with several devices connected, switch to "Compare" to overlay CPU, memory or temperature
@@ -79,9 +80,10 @@ Built on the [scrcpy](https://github.com/Genymobile/scrcpy) 5.0.1 server, decode
   </tr>
 </table>
 
-Shell, Logcat and serial tabs share one terminal area. Each tab shows the device name and serial, plus `$` for a normal user or `#` for root.
+Shell, Logcat, local terminal and serial tabs share one terminal area: "+" next to the tabs opens a Shell, and the arrow beside it offers the other types. Tabs belong to a device: switching shows only that device's terminals while the others keep running in the background. Tabs show `$` for a normal user or `#` for root.
 
 - **Suggestions**: commands, subcommands, options and values pop up as you type; after `pm clear`, `am force-stop` or `monkey -p` you get the packages installed on the device, so `tencent` finds `com.tencent.mm`; commands you've run come first next time
+- **History on ↑ / ↓**: at the prompt, the arrow keys walk through commands you've run. History is stored locally, so it survives new tabs, restarts and switching devices, and it also works on serial consoles and shells without line editing
 - **Copy and paste**: <kbd>⌘C</kbd> / <kbd>⌘V</kbd> on macOS, <kbd>Ctrl+Shift+C</kbd> / <kbd>Ctrl+Shift+V</kbd> on Windows, or the right-click menu (Copy, Paste, Select all, Clear)
 - **Drop files**: drag a file from your computer into the terminal to insert its absolute path
 - **Logcat**: colored output with optional filters such as `-s ActivityManager` or `--pid=$(pidof -s com.example)`

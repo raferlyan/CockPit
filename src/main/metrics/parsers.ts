@@ -1,4 +1,4 @@
-import type { BatteryState, BatteryStatus, LoadSample, ProcessInfo, StorageMount } from '@shared/metrics'
+import type { AcceleratorLoad, BatteryState, BatteryStatus, LoadSample, ProcessInfo, StorageMount } from '@shared/metrics'
 
 export const SEP = '__COCKPIT_SEP__'
 
@@ -21,6 +21,32 @@ export function loadCommand(withBattery: boolean): string {
   ]
   return parts.join(`; echo ${SEP}; `) + '; exit 0'
 }
+
+/**
+ * 读 GPU / NPU 节点，每行输出「键=值」。各家节点不同，能读到哪个算哪个：
+ * Adreno 的 kgsl、部分内核的 /sys/kernel/gpu、Mali、联发科 GED、devfreq（Rockchip 等）、Rockchip 的 rknpu。
+ * devfreq 里名字带 npu 的还可能是 NPU 到内存的总线（bw / ddr），那不是 NPU 自己的频率，要排除。
+ * NPU 的 devfreq load 不能当占用率：Rockchip 实测 rknpu/load 为 0% 时它仍是 100@1000000000Hz，只取频率。
+ */
+export const ACCELERATOR_COMMAND = [
+  // 函数不能叫 r：mksh 预定义了别名 r='fc -e -'
+  'rd(){ v=$(cat "$2" 2>/dev/null) && [ -n "$v" ] && echo "$1=$v"; }',
+  'echo uid=$(id -u)',
+  'for d in /sys/class/kgsl/kgsl-3d0 /sys/kernel/gpu /sys/class/misc/mali0 /sys/kernel/ged; do [ -e $d ] && echo gpu_present=1; done',
+  'for d in /sys/class/npu /sys/kernel/debug/rknpu /sys/class/misc/rknpu; do [ -e $d ] && echo npu_present=1; done',
+  'rd gpu_model /sys/kernel/gpu/gpu_model',
+  'rd gpu_busy /sys/class/kgsl/kgsl-3d0/gpu_busy_percentage',
+  'rd gpu_ratio /sys/class/kgsl/kgsl-3d0/gpubusy',
+  'rd gpu_busy /sys/kernel/gpu/gpu_busy',
+  'rd gpu_busy /sys/class/misc/mali0/device/utilization',
+  'rd gpu_busy /sys/kernel/ged/hal/gpu_utilization',
+  'rd gpu_freq /sys/class/kgsl/kgsl-3d0/gpuclk',
+  'rd gpu_freq /sys/kernel/gpu/gpu_clock',
+  'rd npu_busy /sys/kernel/debug/rknpu/load',
+  'rd npu_freq /sys/kernel/debug/rknpu/freq',
+  'for f in /sys/class/devfreq/*; do n=${f##*/}; case $n in *bw*|*ddr*|*llcc*|*l3*) ;; *npu*) echo npu_present=1; rd npu_freq $f/cur_freq ;; *gpu*|*mali*|*kgsl*) echo gpu_present=1; rd gpu_busy $f/load; rd gpu_freq $f/cur_freq ;; esac; done',
+  'true'
+].join('; ')
 
 export const PROCESSES_COMMAND = 'top -b -n 1 -q -s 3 -o PID,USER,%CPU,RES,NAME'
 export const STORAGE_COMMAND = 'df -k /data /storage/emulated/0 / 2>/dev/null; exit 0'
@@ -226,4 +252,62 @@ function normalizeMount(mount: string): string {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
+}
+
+/** 频率节点的单位各家不同（Hz / kHz / MHz），按数量级换算 */
+function toMHz(raw: number): number | undefined {
+  if (!Number.isFinite(raw) || raw <= 0) return undefined
+  if (raw >= 1_000_000) return Math.round(raw / 1_000_000)
+  if (raw >= 10_000) return Math.round(raw / 1_000)
+  return Math.round(raw)
+}
+
+/** 「12 %」「12」「25@400000000Hz」「12 34 56」（取第一个）「NPU load: Core0: 10%, Core1: 30%,」都按百分比理解 */
+function parseBusy(raw: string): { busy: number; cores?: number[] } | undefined {
+  const percents = [...raw.matchAll(/(\d+(?:\.\d+)?)\s*%/g)].map((m) => Number(m[1]))
+  const values = percents.length ? percents : [Number(raw.match(/^\s*(\d+(?:\.\d+)?)/)?.[1] ?? NaN)]
+  if (values.some((v) => !Number.isFinite(v) || v > 100)) return undefined
+  const busy = values.reduce((a, b) => a + b, 0) / values.length
+  return values.length > 1 ? { busy, cores: values } : { busy }
+}
+
+/** gpubusy「忙 总」是最近一个统计窗口；GPU 空闲时两个都是 0 */
+function parseRatio(raw: string): number | undefined {
+  const match = raw.trim().match(/^(\d+)\s+(\d+)$/)
+  if (!match) return undefined
+  const total = Number(match[2])
+  return total > 0 ? clamp((Number(match[1]) / total) * 100, 0, 100) : 0
+}
+
+function acceleratorLoad(values: Map<string, string>, prefix: string, asRoot: boolean): AcceleratorLoad {
+  const busyRaw = values.get(`${prefix}_busy`)
+  const parsed = busyRaw === undefined ? undefined : parseBusy(busyRaw)
+  const ratioRaw = values.get(`${prefix}_ratio`)
+  const busy = parsed?.busy ?? (ratioRaw === undefined ? undefined : parseRatio(ratioRaw))
+  const freqRaw = values.get(`${prefix}_freq`)
+  const load: AcceleratorLoad = { access: busy !== undefined ? 'ok' : asRoot ? 'unavailable' : 'needs-root' }
+  if (busy !== undefined) load.busy = clamp(busy, 0, 100)
+  if (parsed?.cores) load.cores = parsed.cores
+  const freqMHz = freqRaw === undefined ? undefined : toMHz(Number(freqRaw.match(/\d+/)?.[0]))
+  if (freqMHz) load.freqMHz = freqMHz
+  const model = values.get(`${prefix}_model`)
+  if (model) load.model = model
+  return load
+}
+
+/** 同一个键出现多次时，取第一个（节点按可靠程度排列） */
+export function parseAccelerators(text: string): Pick<LoadSample, 'gpu' | 'npu'> {
+  const values = new Map<string, string>()
+  for (const line of text.split(/\r?\n/)) {
+    const index = line.indexOf('=')
+    if (index <= 0) continue
+    const key = line.slice(0, index).trim()
+    if (!values.has(key)) values.set(key, line.slice(index + 1).trim())
+  }
+  const asRoot = values.get('uid') === '0'
+  const has = (prefix: string) => [...values.keys()].some((key) => key.startsWith(`${prefix}_`))
+  return {
+    gpu: has('gpu') ? acceleratorLoad(values, 'gpu', asRoot) : undefined,
+    npu: has('npu') ? acceleratorLoad(values, 'npu', asRoot) : undefined
+  }
 }

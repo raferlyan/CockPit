@@ -12,6 +12,7 @@ import { compileFilter, DEFAULT_FILTER, logcatBuffer, renderLine, type CompiledF
 import { t } from '../i18n'
 import { suggest, type Suggestion } from './completion'
 import { getHistory, getPackages, recordHistory } from './completionSources'
+import { HistoryNav, type LineEdit } from './historyNav'
 import { readInputLine } from './inputLine'
 import { useThemeStore, type ResolvedTheme } from '../theme/themeStore'
 import { terminalFontStack, useSettingsStore } from '../settings/settingsStore'
@@ -167,6 +168,24 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
       frame ||= requestAnimationFrame(updateSuggestions)
     }
 
+    const historyNav = new HistoryNav(getHistory)
+    /** 上下键：在提示符后翻历史。全屏程序、前台命令没有提示符，按键照常交给设备；PowerShell 有自己的历史 */
+    const navigateHistory = (key: 'ArrowUp' | 'ArrowDown'): boolean => {
+      if (tab.kind === 'local' || tab.kind === 'logcat') return false
+      let edit: LineEdit | null
+      if (historyNav.active) {
+        edit = key === 'ArrowUp' ? historyNav.up('') : historyNav.down()
+      } else {
+        const line = readInputLine(term)
+        if (line === null) return false
+        edit = key === 'ArrowUp' ? historyNav.up(line) : null
+        if (!edit && key === 'ArrowUp') return false
+      }
+      if (edit) api.terminal.write(tab.id, '\x7f'.repeat(edit.deleteCount) + edit.insert)
+      typedAt = 0
+      return true
+    }
+
     term.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown') return true
       const shortcut = isMac ? event.metaKey : event.ctrlKey && event.shiftKey
@@ -194,7 +213,14 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
       }
 
       const current = popupRef.current
-      if (!current) return true
+      if (!current) {
+        const plain = !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey
+        if (plain && (event.key === 'ArrowUp' || event.key === 'ArrowDown') && navigateHistory(event.key)) {
+          event.preventDefault()
+          return false
+        }
+        return true
+      }
       switch (event.key) {
         case 'ArrowDown':
         case 'ArrowUp': {
@@ -230,14 +256,18 @@ export function TerminalView({ tab, active }: { tab: TerminalTab; active: boolea
     })
     const input = term.onData((data) => {
       if (data === '\r') {
-        const line = readInputLine(term)
+        // 刚翻出来就回车时回显可能还没到，不能读屏幕
+        const line = historyNav.active ? historyNav.text : readInputLine(term)
         if (line) recordHistory(line)
+        historyNav.reset()
         typedAt = 0
         showPopup(null)
       } else if (data === '\x7f' || !/[\x00-\x1f]/.test(data)) {
         // 可见字符或退格：等回显后刷新提示
+        historyNav.reset()
         typedAt = Date.now()
       } else {
+        historyNav.reset()
         typedAt = 0
         showPopup(null)
       }

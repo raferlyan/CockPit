@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { useAppStore } from '../store'
 import { useTerminalStore } from '../terminal/terminalStore'
+import { visibleTabs } from '../terminal/tabScope'
 import { useSettingsStore, type PaneSizes } from './settingsStore'
 import { t } from '../i18n'
 
@@ -81,7 +82,9 @@ export function ToolStripe({ pane }: { pane: Pane }) {
 /** 图标旁的数字：在线设备数、终端标签数 */
 function useStripeBadge(pane: Pane): number | null {
   const online = useAppStore((s) => s.devices.filter((d) => d.state === 'device').length)
-  const tabs = useTerminalStore((s) => s.tabs.length)
+  // 只算当前设备下能看到的标签
+  const focused = useAppStore((s) => s.focusedSerial)
+  const tabs = useTerminalStore((s) => visibleTabs(s.tabs, focused).length)
   if (pane === 'sidebar') return online || null
   if (pane === 'terminal') return tabs || null
   return null

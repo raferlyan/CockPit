@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { LoadSample } from '@shared/metrics'
+import type { AcceleratorLoad, LoadSample } from '@shared/metrics'
 import type { Device } from '@shared/models'
 import { useAppStore } from '../store'
 import { deviceTitle } from '../labels'
@@ -12,10 +12,19 @@ import { t } from '../i18n'
 /** 曲线显示最近 5 分钟，与缓冲长度一致 */
 const CHART_WINDOW_MS = 5 * 60_000
 
-type CompareMetric = 'cpu' | 'memory' | 'cpuTemp'
+type CompareMetric = 'cpu' | 'gpu' | 'memory' | 'cpuTemp'
+
+/** 占用读不到时说明原因，频率和型号即使没有占用也照样显示 */
+function acceleratorSub(load: AcceleratorLoad): string {
+  const details = [load.freqMHz ? `${load.freqMHz} MHz` : '', load.model ?? ''].filter(Boolean).join(' · ')
+  if (load.access === 'ok') return details
+  const reason = load.access === 'needs-root' ? t('读取需要 root') : t('驱动未提供占用数据')
+  return details ? `${reason} · ${details}` : reason
+}
 
 const COMPARE_METRICS: Record<CompareMetric, { label: () => string; unit: string; range?: [number, number]; pick: (s: LoadSample) => number | undefined }> = {
   cpu: { label: () => 'CPU', unit: '%', range: [0, 100], pick: (s) => s.cpu?.total },
+  gpu: { label: () => 'GPU', unit: '%', range: [0, 100], pick: (s) => s.gpu?.busy },
   memory: { label: () => t('内存'), unit: '%', range: [0, 100], pick: (s) => (s.memory ? memoryUsedPercent(s.memory) : undefined) },
   cpuTemp: { label: () => t('CPU 温度'), unit: '°C', pick: (s) => s.thermal?.cpu }
 }
@@ -82,6 +91,9 @@ function DeviceStatus({ serial }: { serial: string }) {
       ]),
     [recent]
   )
+  const showAccelChart = recent.some((s) => s.gpu?.busy !== undefined || s.npu?.busy !== undefined)
+  const accelSeries = (['gpu', 'npu'] as const).filter((key) => recent.some((s) => s[key]?.busy !== undefined))
+  const accelData = useMemo(() => alignSeries(accelSeries.map((key) => recent.map((s) => ({ t: s.t, v: s[key]?.busy })))), [recent, accelSeries.join()])
   const thermalKeys = (['cpu', 'battery', 'skin'] as const).filter((key) => latest?.thermal?.[key] !== undefined)
   const thermalData = useMemo(
     () => alignSeries(thermalKeys.map((key) => recent.map((s) => ({ t: s.t, v: s.thermal?.[key] })))),
@@ -104,7 +116,7 @@ function DeviceStatus({ serial }: { serial: string }) {
     )
   }
 
-  const { cpu, memory, thermal, battery, net, loadavg } = latest
+  const { cpu, gpu, npu, memory, thermal, battery, net, loadavg } = latest
   return (
     <div className="status">
       {metrics?.error && (
@@ -115,6 +127,8 @@ function DeviceStatus({ serial }: { serial: string }) {
       )}
       <div className="tiles">
         <Tile label="CPU" value={cpu ? `${cpu.total.toFixed(0)}%` : '—'} sub={loadavg ? t('负载 {v}', { v: loadavg.map((v) => v.toFixed(2)).join(' ') }) : undefined} />
+        {gpu && <Tile label="GPU" value={gpu.busy !== undefined ? `${gpu.busy.toFixed(0)}%` : '—'} sub={acceleratorSub(gpu)} />}
+        {npu && <Tile label="NPU" value={npu.busy !== undefined ? `${npu.busy.toFixed(0)}%` : '—'} sub={acceleratorSub(npu)} />}
         <Tile
           label={t('内存')}
           value={memory ? `${memoryUsedPercent(memory).toFixed(0)}%` : '—'}
@@ -158,6 +172,18 @@ function DeviceStatus({ serial }: { serial: string }) {
           unit="%"
         />
       </section>
+
+      {showAccelChart && (
+        <section className="status-section">
+          <h3 className="status-heading">{t('GPU 与 NPU 占用')}</h3>
+          <Chart
+            series={accelSeries.map((key, i) => ({ label: key.toUpperCase(), color: SERIES_COLORS[i] }))}
+            data={accelData}
+            range={[0, 100]}
+            unit="%"
+          />
+        </section>
+      )}
 
       {thermalKeys.length > 0 && (
         <section className="status-section">
@@ -284,6 +310,7 @@ function CompareView({ devices }: { devices: Device[] }) {
           <tr>
             <th>{t('设备')}</th>
             <th className="num">CPU</th>
+            <th className="num">GPU</th>
             <th className="num">{t('内存')}</th>
             <th className="num">{t('温度')}</th>
           </tr>
@@ -298,6 +325,7 @@ function CompareView({ devices }: { devices: Device[] }) {
                   {deviceTitle(d)}
                 </td>
                 <td className="num mono">{latest?.cpu ? `${latest.cpu.total.toFixed(0)}%` : '—'}</td>
+                <td className="num mono">{latest?.gpu?.busy !== undefined ? `${latest.gpu.busy.toFixed(0)}%` : '—'}</td>
                 <td className="num mono">{latest?.memory ? `${memoryUsedPercent(latest.memory).toFixed(0)}%` : '—'}</td>
                 <td className="num mono">{latest?.thermal?.cpu !== undefined ? `${latest.thermal.cpu.toFixed(1)}°` : '—'}</td>
               </tr>

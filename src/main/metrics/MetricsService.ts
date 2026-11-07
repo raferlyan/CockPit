@@ -2,8 +2,10 @@ import type { BatteryState, LoadSample, MetricsEvent, MetricsSnapshot, ProcessIn
 import type { Device } from '@shared/models'
 import type { AdbClient } from '../adb/AdbClient'
 import {
+  ACCELERATOR_COMMAND,
   cpuUsage,
   loadCommand,
+  parseAccelerators,
   parseBattery,
   parseCpuFreq,
   parseDf,
@@ -28,6 +30,12 @@ const STORAGE_INTERVAL = 10_000
 /** 环形缓冲长度：1s 一条，保留 5 分钟，正好是曲线显示的范围 */
 const HISTORY_SIZE = 300
 const COMMAND_TIMEOUT = 5_000
+const ACCELERATOR_INTERVAL = 2_000
+/** root 会话可能被长命令占着；读数太旧就不要再画，曲线上留空比假装没变好 */
+const ACCELERATOR_STALE = 6_000
+
+/** 有后台 root 会话时用它执行（不写操作日志） */
+export type RootExec = (serial: string) => ((command: string, timeout: number) => Promise<string>) | undefined
 
 /** 单台设备的采集循环。上一轮还没返回时跳过本轮，避免命令在慢设备上堆积 */
 class DevicePoller {
@@ -43,11 +51,13 @@ class DevicePoller {
   private prevStat?: ReturnType<typeof parseProcStat>
   private prevNet?: { counters: NetCounters; t: number }
   private battery?: BatteryState
+  private accelerators?: { t: number; value: Pick<LoadSample, 'gpu' | 'npu'> }
 
   constructor(
     private readonly adb: AdbClient,
     readonly serial: string,
-    private readonly emit: (event: MetricsEvent) => void
+    private readonly emit: (event: MetricsEvent) => void,
+    private readonly rootExec?: RootExec
   ) {}
 
   start(): void {
@@ -64,6 +74,7 @@ class DevicePoller {
       this.timers.push(setInterval(run, interval))
     }
     every('load', LOAD_INTERVAL, () => this.collectLoad())
+    every('accelerators', ACCELERATOR_INTERVAL, () => this.collectAccelerators())
     every('processes', PROCESSES_INTERVAL, () => this.collectProcesses())
     every('storage', STORAGE_INTERVAL, () => this.collectStorage())
   }
@@ -101,6 +112,7 @@ class DevicePoller {
       battery: this.battery,
       loadavg: parseLoadavg(loadText)
     }
+    if (this.accelerators && t - this.accelerators.t <= ACCELERATOR_STALE) Object.assign(sample, this.accelerators.value)
     // CPU 与网络是差值，第一轮只记基线
     const total = cpuUsage(prev?.all, stat.all)
     if (prev && total !== null) {
@@ -139,6 +151,14 @@ class DevicePoller {
     this.emit({ type: 'load', serial: this.serial, sample })
   }
 
+  private async collectAccelerators(): Promise<void> {
+    const exec = this.rootExec?.(this.serial)
+    const out = exec
+      ? await exec(ACCELERATOR_COMMAND, COMMAND_TIMEOUT)
+      : await this.adb.shell(this.serial, ACCELERATOR_COMMAND, { timeout: COMMAND_TIMEOUT })
+    this.accelerators = { t: Date.now(), value: parseAccelerators(out) }
+  }
+
   private async collectProcesses(): Promise<void> {
     const out = await this.adb.shell(this.serial, PROCESSES_COMMAND, { timeout: COMMAND_TIMEOUT })
     this.processes = parseTop(out)
@@ -173,7 +193,8 @@ export class MetricsService {
 
   constructor(
     private readonly adb: AdbClient,
-    private readonly emit: (event: MetricsEvent) => void
+    private readonly emit: (event: MetricsEvent) => void,
+    private readonly rootExec?: RootExec
   ) {}
 
   onDevicesChanged(devices: Device[]): void {
@@ -186,7 +207,7 @@ export class MetricsService {
     }
     for (const serial of online) {
       if (this.pollers.has(serial) || this.paused.has(serial)) continue
-      const poller = new DevicePoller(this.adb, serial, this.emit)
+      const poller = new DevicePoller(this.adb, serial, this.emit, this.rootExec)
       this.pollers.set(serial, poller)
       poller.start()
     }

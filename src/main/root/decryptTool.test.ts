@@ -1,8 +1,8 @@
-import { chmod, mkdtemp, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { buildToolArgs, parseToolOutput, runDecryptTool } from './decryptTool'
+import { buildToolArgs, parseToolOutput, runDecryptTool, setDecryptToolFallbackDir } from './decryptTool'
 
 describe('decrypt tool', () => {
   it('builds args with quoted parts and the challenge placeholder', () => {
@@ -30,6 +30,38 @@ describe('decrypt tool', () => {
 
     it('passes the challenge on stdin', async () => {
       await expect(runDecryptTool({ toolPath: tool, toolArgs: '', toolStdin: true }, 'XY9')).resolves.toBe('9YX')
+    })
+
+    it('runs in the tool directory so it can save its token cache there', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'cockpit-tool-'))
+      const cacheTool = join(dir, 'decrypt')
+      await writeFile(cacheTool, '#!/bin/sh\necho token > access_token && echo "$1" | rev\n')
+      await chmod(cacheTool, 0o755)
+      await expect(runDecryptTool({ toolPath: cacheTool, toolArgs: '', toolStdin: false }, 'AB')).resolves.toBe('BA')
+      expect((await readFile(join(dir, 'access_token'), 'utf8')).trim()).toBe('token')
+    })
+
+    it('falls back to a writable directory when the tool directory is read-only', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'cockpit-tool-'))
+      const fallback = await mkdtemp(join(tmpdir(), 'cockpit-fallback-'))
+      const cacheTool = join(dir, 'decrypt')
+      await writeFile(cacheTool, '#!/bin/sh\necho token > access_token || exit 1\necho "$1" | rev\n')
+      await chmod(cacheTool, 0o755)
+      await chmod(dir, 0o555)
+      setDecryptToolFallbackDir(fallback)
+      try {
+        await expect(runDecryptTool({ toolPath: cacheTool, toolArgs: '', toolStdin: false }, 'AB')).resolves.toBe('BA')
+        expect((await readFile(join(fallback, 'access_token'), 'utf8')).trim()).toBe('token')
+      } finally {
+        await chmod(dir, 0o755)
+      }
+    })
+
+    it('does not take an error message as the password', async () => {
+      const failing = join(await mkdtemp(join(tmpdir(), 'cockpit-tool-')), 'decrypt')
+      await writeFile(failing, '#!/bin/sh\necho "保存access_token失败"\n')
+      await chmod(failing, 0o755)
+      await expect(runDecryptTool({ toolPath: failing, toolArgs: '', toolStdin: false }, 'AB')).rejects.toThrow(/解密工具报错：保存access_token失败/)
     })
 
     it('explains a missing tool', async () => {
