@@ -1,6 +1,6 @@
 {
   "name": "cockpit",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Android 设备投屏、终端与状态监控桌面工具",
   "main": "./out/main/index.js",
   "author": "raferlyan",
