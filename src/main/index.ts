@@ -1,6 +1,7 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, type BrowserWindowConstructorOptions } from 'electron'
 import type { AdbStatus } from '@shared/models'
+import type { MetricsEvent } from '@shared/metrics'
 import { AdbClient } from './adb/AdbClient'
 import { resolveAdbPath } from './adb/adbPath'
 import { DeviceManager } from './devices/DeviceManager'
@@ -19,6 +20,7 @@ import { TraceRecorder } from './trace/TraceRecorder'
 import { RootService } from './root/RootService'
 import { RootSettingsStore } from './root/RootSettingsStore'
 import { OperationLog } from './oplog/OperationLog'
+import { MetricsRecorder } from './metrics/MetricsRecorder'
 import { safeStorage } from 'electron'
 
 let deviceManager: DeviceManager | undefined
@@ -31,21 +33,21 @@ const serial = new SerialService()
 let perfetto: PerfettoUiServer | undefined
 let recorder: TraceRecorder | undefined
 let rootService: RootService | undefined
+let metricsRecorder: MetricsRecorder | undefined
+let mainWindow: BrowserWindow | undefined
+let statusWindow: BrowserWindow | undefined
 
 /** 开发时为项目根目录下的 resources/，打包后为 extraResources 目录 */
 function resourcesDir(): string {
   return app.isPackaged ? join(process.resourcesPath, 'resources') : join(app.getAppPath(), 'resources')
 }
 
-function createWindow(): void {
+/** 主窗口与状态窗口共用：同一套页面，hash 决定渲染哪个界面 */
+function openWindow(options: BrowserWindowConstructorOptions, hash?: string): BrowserWindow {
   const win = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 960,
-    minHeight: 600,
     show: false,
-    title: 'Cockpit',
     backgroundColor: windowBackground(),
+    ...options,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -65,16 +67,50 @@ function createWindow(): void {
   })
 
   if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
-    void win.loadURL(process.env.ELECTRON_RENDERER_URL)
+    void win.loadURL(process.env.ELECTRON_RENDERER_URL + (hash ? `#${hash}` : ''))
   } else {
-    void win.loadFile(join(__dirname, '../renderer/index.html'))
+    void win.loadFile(join(__dirname, '../renderer/index.html'), hash ? { hash } : undefined)
   }
+  return win
+}
+
+function createWindow(): void {
+  const win = openWindow({ width: 1440, height: 900, minWidth: 960, minHeight: 600, title: 'Cockpit' })
+  mainWindow = win
+  // 状态窗口只是主窗口的附属，主窗口关掉时一起关
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = undefined
+    statusWindow?.close()
+  })
+}
+
+/** 独立的设备状态窗口，同时只开一个；适合放到另一块屏幕上，一边投屏操作一边看曲线 */
+function openStatusWindow(): void {
+  if (statusWindow && !statusWindow.isDestroyed()) {
+    if (statusWindow.isMinimized()) statusWindow.restore()
+    statusWindow.focus()
+    return
+  }
+  const win = openWindow({ width: 900, height: 820, minWidth: 420, minHeight: 400, title: 'Cockpit' }, 'status')
+  statusWindow = win
+  win.on('closed', () => {
+    if (statusWindow === win) statusWindow = undefined
+  })
 }
 
 async function bootstrap(): Promise<void> {
   const adbPath = await resolveAdbPath({ bundledDir: app.isPackaged ? process.resourcesPath : undefined })
   let adb: AdbClient | undefined
-  const oplog = new OperationLog((event) => broadcast(IpcChannel.OplogEvent, event))
+  // 每条设备操作第一次出现时在那台设备的时间轴上打个标记（安装、录 trace、进 root…）
+  const markedOps = new Set<string>()
+  const oplog = new OperationLog((event) => {
+    broadcast(IpcChannel.OplogEvent, event)
+    if (event.type === 'clear') markedOps.clear()
+    else if (event.entry.serial && !markedOps.has(event.entry.id)) {
+      markedOps.add(event.entry.id)
+      metrics?.mark(event.entry.serial, 'operation', event.entry.label, event.entry.detail)
+    }
+  })
   const rootSettings = new RootSettingsStore(join(app.getPath('userData'), 'root-settings.json'), {
     available: () => safeStorage.isEncryptionAvailable(),
     encrypt: (text) => safeStorage.encryptString(text).toString('base64'),
@@ -103,7 +139,10 @@ async function bootstrap(): Promise<void> {
     shellService = new ShellService(adbPath, (serial, root) => devices.setShellRoot(serial, root), roots)
     metrics = new MetricsService(
       adb,
-      (event) => broadcast(IpcChannel.MetricsEvent, event),
+      (event) => {
+        broadcast(IpcChannel.MetricsEvent, event)
+        metricsRecorder?.write(event)
+      },
       (serial) => {
         const session = roots.session(serial)
         return session ? (command, timeout) => session.exec(command, timeout, false) : undefined
@@ -127,6 +166,23 @@ async function bootstrap(): Promise<void> {
     )
   }
 
+  const manager = deviceManager
+  metricsRecorder = new MetricsRecorder(
+    join(app.getPath('documents'), 'Cockpit', 'Metrics'),
+    (serial) => {
+      const device = manager?.list().find((d) => d.serial === serial)
+      return device?.info?.model ?? device?.model
+    },
+    (event) => broadcast(IpcChannel.MetricsEvent, event),
+    (path) => shell.trashItem(path),
+    (serial) => {
+      const snapshot = metrics?.snapshot(serial)
+      const events: MetricsEvent[] = []
+      if (snapshot?.foreground) events.push({ type: 'foreground', serial, foreground: snapshot.foreground })
+      if (snapshot?.focus) events.push({ type: 'focus', serial, focus: snapshot.focus })
+      return events
+    }
+  )
   perfetto = new PerfettoUiServer(join(resourcesDir(), 'perfetto-ui'))
   registerIpc({
     adb,
@@ -140,11 +196,13 @@ async function bootstrap(): Promise<void> {
     perfetto,
     traces,
     recorder,
+    metricsRecorder,
     root: rootService,
     rootSettings,
     oplog,
     fallbackStatus
   })
+  ipcMain.on(IpcChannel.AppOpenStatusWindow, () => openStatusWindow())
   createWindow()
   void deviceManager?.start()
 }
@@ -164,7 +222,7 @@ app.whenReady().then(() => {
   void bootstrap()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (!mainWindow) createWindow()
   })
 })
 
@@ -176,6 +234,7 @@ app.on('before-quit', () => {
   mirror?.dispose()
   shellService?.dispose()
   rootService?.dispose()
+  metricsRecorder?.dispose()
   metrics?.dispose()
   serial.dispose()
   perfetto?.dispose()

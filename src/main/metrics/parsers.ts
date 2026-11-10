@@ -1,12 +1,13 @@
-import type { AcceleratorLoad, BatteryState, BatteryStatus, LoadSample, ProcessInfo, StorageMount } from '@shared/metrics'
+import type { AcceleratorLoad, BatteryState, BatteryStatus, CpuCluster, LoadSample, ProcessInfo, StorageMount } from '@shared/metrics'
 
 export const SEP = '__COCKPIT_SEP__'
 
 /**
  * 负载采集合并成一次 shell 调用，各段用分隔符切开。
- * 段顺序：/proc/stat、meminfo、每核频率、温度、网络、loadavg、（可选）dumpsys battery。
+ * 段顺序：/proc/stat、meminfo、每核频率、温度、网络、loadavg、地址、（可选）dumpsys battery、
+ * 频率上限、PSI、（可选）温控等级，最后是调用方追加的段（如关注应用的 /proc）。新段只往后加，前面的下标不变。
  */
-export function loadCommand(withBattery: boolean): string {
+export function loadCommand(withBattery: boolean, extra: string[] = []): string {
   const parts = [
     'cat /proc/stat',
     'cat /proc/meminfo',
@@ -17,7 +18,14 @@ export function loadCommand(withBattery: boolean): string {
     'cat /proc/loadavg',
     // /sys/class/net/*/operstate 在 Android 12+ 上 shell 读不到（SELinux），改看哪些接口拿到了全局地址
     'ip -o addr show 2>/dev/null',
-    withBattery ? 'dumpsys battery' : 'true'
+    withBattery ? 'dumpsys battery' : 'true',
+    // 一次 grep 读完所有核的频率上限与硬件最高频率，按「路径:值」输出，节点缺失也不会错位
+    'grep -H . /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_max_freq /sys/devices/system/cpu/cpu[0-9]*/cpufreq/cpuinfo_max_freq 2>/dev/null',
+    // PSI 需要内核 4.19+（或厂商回移植），部分机型 SELinux 不让 shell 读，读不到就是空段
+    'grep -H . /proc/pressure/cpu /proc/pressure/memory /proc/pressure/io 2>/dev/null',
+    // 温控等级和电池一样走 binder，跟电池同频
+    withBattery ? "dumpsys thermalservice 2>/dev/null | grep -m 1 'Thermal Status'" : 'true',
+    ...extra
   ]
   return parts.join(`; echo ${SEP}; `) + '; exit 0'
 }
@@ -55,6 +63,8 @@ export const STORAGE_COMMAND = 'df -k /data /storage/emulated/0 / 2>/dev/null; e
 export interface CpuTimes {
   busy: number
   total: number
+  /** 已计入空闲，单独记下用来算 IO 等待 */
+  iowait: number
 }
 
 /** 返回 [总体, cpu0, cpu1, …]；离线核在 /proc/stat 中不出现，对应位置为 undefined */
@@ -68,7 +78,7 @@ export function parseProcStat(text: string): { all?: CpuTimes; cores: (CpuTimes 
     // user nice system idle iowait irq softirq steal …；idle + iowait 视为空闲
     const total = values.slice(0, 8).reduce((a, b) => a + (b || 0), 0)
     const idle = (values[3] || 0) + (values[4] || 0)
-    const times = { busy: total - idle, total }
+    const times = { busy: total - idle, total, iowait: values[4] || 0 }
     if (match[1] === '') all = times
     else cores[Number(match[1])] = times
   }
@@ -81,6 +91,57 @@ export function cpuUsage(prev: CpuTimes | undefined, next: CpuTimes | undefined)
   const total = next.total - prev.total
   if (total <= 0) return null
   return clamp(((next.busy - prev.busy) / total) * 100, 0, 100)
+}
+
+/** 两次采样之间 IO 等待占总时间的百分比 */
+export function cpuIowait(prev: CpuTimes | undefined, next: CpuTimes | undefined): number | null {
+  if (!prev || !next) return null
+  const total = next.total - prev.total
+  if (total <= 0) return null
+  return clamp(((next.iowait - prev.iowait) / total) * 100, 0, 100)
+}
+
+/**
+ * 解析 `grep -H` 输出的每核 scaling_max_freq / cpuinfo_max_freq，按硬件最高频率分簇（小核在前）。
+ * 簇的上限取簇内最小的 scaling_max_freq：被温控或省电策略压低时，它会明显低于硬件最高频率。
+ */
+export function parseCpuLimits(text: string): CpuCluster[] | undefined {
+  const limit = new Map<number, number>()
+  const max = new Map<number, number>()
+  for (const match of text.matchAll(/\/cpu(\d+)\/cpufreq\/(scaling_max_freq|cpuinfo_max_freq):(\d+)/g)) {
+    const core = Number(match[1])
+    const mhz = Math.round(Number(match[3]) / 1000)
+    if (!(mhz > 0)) continue
+    ;(match[2] === 'cpuinfo_max_freq' ? max : limit).set(core, mhz)
+  }
+  if (!max.size) return undefined
+  const clusters = new Map<number, CpuCluster>()
+  for (const [core, maxMHz] of [...max].sort((a, b) => a[0] - b[0])) {
+    const cluster = clusters.get(maxMHz) ?? { cores: [], maxMHz, limitMHz: maxMHz }
+    cluster.cores.push(core)
+    const coreLimit = limit.get(core)
+    if (coreLimit !== undefined) cluster.limitMHz = Math.min(cluster.limitMHz, coreLimit)
+    clusters.set(maxMHz, cluster)
+  }
+  return [...clusters.values()].sort((a, b) => a.maxMHz - b.maxMHz)
+}
+
+/**
+ * PSI：`/proc/pressure/cpu:some avg10=1.23 avg60=… total=…`。
+ * 取 some 的 avg10，即最近 10 秒里“至少有一个任务因这项资源等待”的时间占比。
+ */
+export function parsePsi(text: string): LoadSample['psi'] {
+  const result: NonNullable<LoadSample['psi']> = {}
+  for (const match of text.matchAll(/\/proc\/pressure\/(cpu|memory|io):some avg10=([\d.]+)/g)) {
+    result[match[1] as keyof typeof result] = Number(match[2])
+  }
+  return Object.keys(result).length ? result : undefined
+}
+
+/** `Thermal Status: 2` → 2；0 无、1 轻微、2 中等、3 严重、4 紧急、5 危急、6 关机 */
+export function parseThermalStatus(text: string): number | undefined {
+  const match = text.match(/Thermal Status:\s*(\d+)/)
+  return match ? Number(match[1]) : undefined
 }
 
 export function parseMeminfo(text: string): LoadSample['memory'] {

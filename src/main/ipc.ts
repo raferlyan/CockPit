@@ -9,6 +9,8 @@ import type { DeviceManager } from './devices/DeviceManager'
 import type { MirrorService } from './mirror/MirrorService'
 import type { ShellService } from './shell/ShellService'
 import type { MetricsService } from './metrics/MetricsService'
+import type { MetricsRecorder } from './metrics/MetricsRecorder'
+import { normalizeAlertRules } from '@shared/alerts'
 import type { TerminalOpenOptions } from '@shared/terminal'
 import type { SerialService } from './serial/SerialService'
 import type { SerialOptions } from '@shared/serial'
@@ -53,12 +55,14 @@ export function registerIpc(ctx: {
   perfetto: PerfettoUiServer
   traces: TraceLibrary
   recorder?: TraceRecorder
+  /** 状态数据录制，不依赖 adb（没有设备时也能回看旧文件） */
+  metricsRecorder: MetricsRecorder
   root?: RootService
   rootSettings: RootSettingsStore
   oplog: OperationLog
   fallbackStatus: AdbStatus
 }): void {
-  const { adb, deviceManager, mirror, shell, metrics, files, apps, serial, perfetto, traces, recorder, root, rootSettings, oplog } = ctx
+  const { adb, deviceManager, mirror, shell, metrics, files, apps, serial, perfetto, traces, recorder, metricsRecorder, root, rootSettings, oplog } = ctx
   setDecryptToolFallbackDir(join(app.getPath('userData'), 'decrypt-tool'))
   const requireRoot = () => {
     if (!root) throw new Error('未找到 adb')
@@ -120,7 +124,11 @@ export function registerIpc(ctx: {
     if (!mirror) throw new Error('未找到 adb')
     return mirror.stopRecording(String(sessionId))
   })
-  ipcMain.on(IpcChannel.MirrorControl, (_e, sessionId: string, input: ControlInput) => mirror?.control(sessionId, input))
+  ipcMain.on(IpcChannel.MirrorControl, (_e, sessionId: string, input: ControlInput) => {
+    mirror?.control(sessionId, input)
+    const serial = mirror?.serialOf(sessionId)
+    if (serial) metrics?.noteInput(serial, input)
+  })
 
   handle(IpcChannel.TerminalOpen, (event, serial: string, options: TerminalOpenOptions) => {
     if (!shell) throw new Error('未找到 adb')
@@ -273,6 +281,61 @@ export function registerIpc(ctx: {
   ipcMain.on(IpcChannel.ClipboardWrite, (_e, text: string) => clipboard.writeText(String(text)))
 
   handle(IpcChannel.MetricsSnapshot, (_e, serial: string) => metrics?.snapshot(serial) ?? { serial, history: [] })
+  handle(IpcChannel.MetricsSetFocusApp, (_e, serial: string, pkg: string | null) => metrics?.setFocusApp(serial, pkg ? String(pkg) : undefined))
+  ipcMain.on(IpcChannel.MetricsSetAlertRules, (_e, rules: unknown) => metrics?.setAlertRules(normalizeAlertRules(rules)))
+  handle(IpcChannel.MetricsRecordStart, (_e, serial: string) => {
+    if (!deviceManager?.list().some((d) => d.serial === serial && d.state === 'device')) throw new Error('设备不在线')
+    return metricsRecorder.start(String(serial))
+  })
+  handle(IpcChannel.MetricsRecordStop, (_e, serial: string) => metricsRecorder.stop(String(serial)))
+  handle(IpcChannel.MetricsRecordStatus, () => metricsRecorder.status())
+  handle(IpcChannel.MetricsRecordList, () => metricsRecorder.list())
+  handle(IpcChannel.MetricsRecordLoad, (_e, path: string) => metricsRecorder.load(String(path)))
+  handle(IpcChannel.MetricsRecordDelete, (_e, path: string) => metricsRecorder.remove(String(path)))
+  handle(IpcChannel.MetricsRecordOpenDir, async () => {
+    const error = await electronShell.openPath(await metricsRecorder.ensureDir())
+    if (error) throw new Error(error)
+  })
+  handle(IpcChannel.MetricsSaveExport, async (event, defaultName: string, text: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const json = String(defaultName).endsWith('.json')
+    const options = {
+      title: tm('导出状态数据'),
+      defaultPath: join(app.getPath('documents'), String(defaultName)),
+      filters: [json ? { name: 'JSON', extensions: ['json'] } : { name: 'CSV', extensions: ['csv'] }]
+    }
+    const result = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+    if (result.canceled || !result.filePath) return null
+    await writeFile(result.filePath, String(text), 'utf8')
+    return result.filePath
+  })
+  handle(IpcChannel.MetricsAddMarker, (_e, serial: string, note?: string) => metrics?.mark(serial, 'manual', note ? String(note).slice(0, 200) : ''))
+  // 帧率按“窗口 × 设备”计数：同一窗口里负载条和状态面板都在看算多次，窗口关掉时它的计数一并清掉
+  // 页面重新加载时计数也要清掉，否则重新挂载的组件会在旧计数上再加一次
+  const frameWatchers = new Map<string, Map<number, number>>()
+  const trackedSenders = new Set<number>()
+  const updateFrames = (serial: string) => {
+    const total = [...(frameWatchers.get(serial)?.values() ?? [])].reduce((a, b) => a + b, 0)
+    metrics?.setFramesWanted(serial, total > 0)
+  }
+  const forgetSender = (id: number) => {
+    for (const [s, counts] of frameWatchers) if (counts.delete(id)) updateFrames(s)
+  }
+  ipcMain.on(IpcChannel.MetricsWatchFrames, (event, serial: string, watching: boolean) => {
+    const id = event.sender.id
+    if (!trackedSenders.has(id)) {
+      trackedSenders.add(id)
+      event.sender.on('did-start-loading', () => forgetSender(id))
+      event.sender.once('destroyed', () => {
+        trackedSenders.delete(id)
+        forgetSender(id)
+      })
+    }
+    const byWindow = frameWatchers.get(serial) ?? new Map<number, number>()
+    frameWatchers.set(serial, byWindow)
+    byWindow.set(id, Math.max(0, (byWindow.get(id) ?? 0) + (watching ? 1 : -1)))
+    updateFrames(serial)
+  })
 
   deviceManager?.on('devices', (devices) => {
     const online = new Set(devices.filter((d) => d.state === 'device').map((d) => d.serial))

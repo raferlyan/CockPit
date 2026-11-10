@@ -51,11 +51,14 @@ Click "Mirror" on the right and the device screen takes the middle while status 
 
 ## Device status: see what's eating resources at a glance
 
-- Total CPU usage and `loadavg`, per-core usage and current frequency, with offline cores marked
-- GPU and NPU usage and frequency (nodes vary by chip and most retail devices need root to read them; the reason is shown when they cannot be read)
+- Total CPU usage, IO wait and `loadavg`; per-core usage and frequency grouped into little / mid / big clusters, with throttled clusters marked
+- Resource pressure (PSI), system thermal status, GPU and NPU usage and frequency (nodes vary by chip; the reason is shown when they cannot be read)
 - Memory and swap / ZRAM, CPU / GPU / battery / skin temperature, battery level, voltage and charging state
-- Network throughput, top 10 processes, storage usage per partition
-- Charts cover the last 5 minutes; with several devices connected, switch to "Compare" to overlay CPU, memory or temperature
+- Foreground app frame rate, janky frames and per-frame times; focus an app to see its CPU, memory and threads
+- Taps, app switches, crashes, ANRs and jank are marked on the charts; pause, drag to zoom, and look back up to 30 minutes
+- A load bar above the mirrored screen while you work; pop the status panel out to another screen
+- Threshold alerts; record status data to replay later, and export CSV / JSON
+- Network throughput, all processes (sortable, searchable, pinnable), storage usage per partition; with several devices connected, switch to "Compare"
 
 ## Mirroring and control: one click puts the screen in the middle
 

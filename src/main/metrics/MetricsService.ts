@@ -1,13 +1,21 @@
-import type { BatteryState, LoadSample, MetricsEvent, MetricsSnapshot, ProcessInfo, StorageMount } from '@shared/metrics'
+import type { BatteryState, LoadSample, MarkerKind, MetricsEvent, MetricsMarker, MetricsSnapshot, ProcessInfo, StorageMount } from '@shared/metrics'
+import type { ControlInput } from '@shared/mirror'
 import type { Device } from '@shared/models'
 import type { AdbClient } from '../adb/AdbClient'
+import { AppMonitor } from './AppMonitor'
+import { AlertEngine } from './AlertEngine'
+import type { AlertRules } from '@shared/alerts'
 import {
   ACCELERATOR_COMMAND,
+  cpuIowait,
   cpuUsage,
   loadCommand,
   parseAccelerators,
   parseBattery,
   parseCpuFreq,
+  parseCpuLimits,
+  parsePsi,
+  parseThermalStatus,
   parseDf,
   parseLoadavg,
   parseMeminfo,
@@ -27,8 +35,10 @@ const LOAD_INTERVAL = 1_000
 const BATTERY_EVERY = 5
 const PROCESSES_INTERVAL = 3_000
 const STORAGE_INTERVAL = 10_000
-/** 环形缓冲长度：1s 一条，保留 5 分钟，正好是曲线显示的范围 */
-const HISTORY_SIZE = 300
+/** 进程表最多带这么多行，界面上可以排序和搜索；toybox top 本身会列出全部进程 */
+const PROCESS_LIMIT = 300
+/** 环形缓冲长度：1s 一条，保留 30 分钟（曲线可以切换显示最近 5 / 10 / 30 分钟） */
+const HISTORY_SIZE = 1800
 const COMMAND_TIMEOUT = 5_000
 const ACCELERATOR_INTERVAL = 2_000
 /** root 会话可能被长命令占着；读数太旧就不要再画，曲线上留空比假装没变好 */
@@ -51,14 +61,27 @@ class DevicePoller {
   private prevStat?: ReturnType<typeof parseProcStat>
   private prevNet?: { counters: NetCounters; t: number }
   private battery?: BatteryState
+  private thermalStatus?: number
   private accelerators?: { t: number; value: Pick<LoadSample, 'gpu' | 'npu'> }
+  readonly app: AppMonitor
+  readonly alerts = new AlertEngine()
+  private readonly emit: (event: MetricsEvent) => void
 
   constructor(
     private readonly adb: AdbClient,
     readonly serial: string,
-    private readonly emit: (event: MetricsEvent) => void,
+    emit: (event: MetricsEvent) => void,
     private readonly rootExec?: RootExec
-  ) {}
+  ) {
+    // 所有推送都过一遍告警判定；告警本身以 alert 标记的形式再推出去
+    this.emit = (event) => {
+      emit(event)
+      for (const firing of this.alerts.observe(event)) {
+        this.app.mark('alert', firing.rule, firing.value, firing.resolved ? { resolved: true } : undefined)
+      }
+    }
+    this.app = new AppMonitor(adb, serial, this.emit)
+  }
 
   start(): void {
     const every = (name: string, interval: number, task: () => Promise<void>) => {
@@ -77,6 +100,7 @@ class DevicePoller {
     every('accelerators', ACCELERATOR_INTERVAL, () => this.collectAccelerators())
     every('processes', PROCESSES_INTERVAL, () => this.collectProcesses())
     every('storage', STORAGE_INTERVAL, () => this.collectStorage())
+    this.app.start(every)
   }
 
   stop(): void {
@@ -85,32 +109,53 @@ class DevicePoller {
     // 暂停后再恢复时重新取基线，避免把暂停期间平均成一个点
     this.prevStat = undefined
     this.prevNet = undefined
+    this.app.stop()
   }
 
   snapshot(): MetricsSnapshot {
-    return { serial: this.serial, history: [...this.history], processes: this.processes, storage: this.storage, error: this.error }
+    return { serial: this.serial, history: [...this.history], processes: this.processes, storage: this.storage, error: this.error, ...this.app.snapshot() }
   }
 
   private async collectLoad(): Promise<void> {
     const withBattery = this.tick++ % BATTERY_EVERY === 0
-    const out = await this.adb.shell(this.serial, loadCommand(withBattery), { timeout: COMMAND_TIMEOUT })
+    const out = await this.adb.shell(this.serial, loadCommand(withBattery, this.app.procCommand()), { timeout: COMMAND_TIMEOUT })
     const t = Date.now()
-    const [statText = '', memText = '', freqText = '', thermalText = '', netText = '', loadText = '', addrText = '', batteryText = ''] = out.split(SEP)
+    const [
+      statText = '',
+      memText = '',
+      freqText = '',
+      thermalText = '',
+      netText = '',
+      loadText = '',
+      addrText = '',
+      batteryText = '',
+      limitText = '',
+      psiText = '',
+      thermalStatusText = '',
+      appStatText = '',
+      appStatusText = ''
+    ] = out.split(SEP)
 
     const stat = parseProcStat(statText)
     const prev = this.prevStat
     this.prevStat = stat
+    this.app.onLoad(t, stat.all?.total, appStatText, appStatusText)
     const net = parseNetDev(netText)
     const prevNet = this.prevNet
     this.prevNet = net ? { counters: net, t } : undefined
-    if (withBattery) this.battery = parseBattery(batteryText) ?? this.battery
+    if (withBattery) {
+      this.battery = parseBattery(batteryText) ?? this.battery
+      this.thermalStatus = parseThermalStatus(thermalStatusText) ?? this.thermalStatus
+    }
 
     const sample: LoadSample = {
       t,
       memory: parseMeminfo(memText),
       thermal: parseThermal(thermalText),
       battery: this.battery,
-      loadavg: parseLoadavg(loadText)
+      loadavg: parseLoadavg(loadText),
+      psi: parsePsi(psiText),
+      thermalStatus: this.thermalStatus
     }
     if (this.accelerators && t - this.accelerators.t <= ACCELERATOR_STALE) Object.assign(sample, this.accelerators.value)
     // CPU 与网络是差值，第一轮只记基线
@@ -121,7 +166,9 @@ class DevicePoller {
       sample.cpu = {
         total,
         cores: Array.from({ length: coreCount }, (_, i) => cpuUsage(prev.cores[i], stat.cores[i])),
-        freqMHz: Array.from({ length: coreCount }, (_, i) => freqMHz[i] ?? null)
+        freqMHz: Array.from({ length: coreCount }, (_, i) => freqMHz[i] ?? null),
+        iowait: cpuIowait(prev.all, stat.all) ?? undefined,
+        clusters: parseCpuLimits(limitText)
       }
     }
     if (net && prevNet && t > prevNet.t) {
@@ -161,7 +208,7 @@ class DevicePoller {
 
   private async collectProcesses(): Promise<void> {
     const out = await this.adb.shell(this.serial, PROCESSES_COMMAND, { timeout: COMMAND_TIMEOUT })
-    this.processes = parseTop(out)
+    this.processes = parseTop(out, PROCESS_LIMIT)
     this.emit({ type: 'processes', serial: this.serial, processes: this.processes })
   }
 
@@ -190,6 +237,8 @@ export class MetricsService {
   private readonly pollers = new Map<string, DevicePoller>()
   /** 录制 trace 时暂停采集的设备，设备列表变化时也不重新启动 */
   private readonly paused = new Set<string>()
+  private readonly framesWanted = new Set<string>()
+  private alertRules?: AlertRules
 
   constructor(
     private readonly adb: AdbClient,
@@ -209,12 +258,46 @@ export class MetricsService {
       if (this.pollers.has(serial) || this.paused.has(serial)) continue
       const poller = new DevicePoller(this.adb, serial, this.emit, this.rootExec)
       this.pollers.set(serial, poller)
+      if (this.framesWanted.has(serial)) poller.app.setFramesWanted(true)
+      if (this.alertRules) poller.alerts.setRules(this.alertRules)
       poller.start()
     }
   }
 
   snapshot(serial: string): MetricsSnapshot {
     return this.pollers.get(serial)?.snapshot() ?? { serial, history: [] }
+  }
+
+  /** 固定关注某个应用；传 undefined 恢复跟随前台 */
+  setFocusApp(serial: string, pkg: string | undefined): void {
+    this.require(serial).app.setPinned(pkg)
+  }
+
+  /** 界面上有人在看帧率时才采；记下来，设备重连、新建采集循环后照样生效 */
+  setFramesWanted(serial: string, wanted: boolean): void {
+    if (wanted) this.framesWanted.add(serial)
+    else this.framesWanted.delete(serial)
+    this.pollers.get(serial)?.app.setFramesWanted(wanted)
+  }
+
+  /** 告警规则由界面的设置决定，对所有设备生效 */
+  setAlertRules(rules: AlertRules): void {
+    this.alertRules = rules
+    for (const poller of this.pollers.values()) poller.alerts.setRules(rules)
+  }
+
+  noteInput(serial: string, input: ControlInput): void {
+    this.pollers.get(serial)?.app.noteInput(input)
+  }
+
+  mark(serial: string, kind: MarkerKind, label: string, detail?: string): MetricsMarker | undefined {
+    return this.pollers.get(serial)?.app.mark(kind, label, detail)
+  }
+
+  private require(serial: string): DevicePoller {
+    const poller = this.pollers.get(serial)
+    if (!poller) throw new Error('设备不在线或采集已暂停')
+    return poller
   }
 
   /** 暂停时停掉定时采集但保留历史曲线，恢复后接着画 */

@@ -32,11 +32,16 @@ const EN: Record<string, string> = {
   '保存日志': 'Save log',
   '保存截图': 'Save screenshot',
   '文本文件': 'Text files',
-  '图片': 'Images'
+  '图片': 'Images',
+  '导出状态数据': 'Export device status data'
 }
 
 /** 长的放前面，避免被短的先替换掉一部分 */
 const PHRASES: Array<[string, string]> = [
+  ['不是 Cockpit 录制的状态数据文件', 'not a Cockpit status recording'],
+  ['只能打开录制目录里的文件', 'only files in the recordings folder can be opened'],
+  ['这个文件正在录制，先停止录制', 'this file is still being recorded, stop the recording first'],
+  ['设备不在线或采集已暂停', 'the device is offline or collection is paused'],
   [
     '（该分区是只读的：需要先 adb root && adb disable-verity && adb remount，或在设备上 su 后 mount -o rw,remount 对应分区）',
     ' (this partition is read-only: run adb root && adb disable-verity && adb remount first, or su on the device and mount -o rw,remount the partition)'

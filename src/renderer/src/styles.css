@@ -3540,3 +3540,547 @@ button {
   white-space: nowrap;
   animation: fade-in var(--dur) var(--ease-out) both;
 }
+
+/* ---------- 实时监控增强：阈值配色、时间轴、进程表、负载条、独立状态窗口 ---------- */
+
+.status-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.paused-banner {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: -4px 0 10px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-2);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.paused-banner > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 超过阈值的卡片：左边一条色带 + 数值变色，正常时保持安静 */
+.tile.level-warn {
+  border-left: 3px solid var(--warn);
+}
+
+.tile.level-danger {
+  border-left: 3px solid var(--err);
+}
+
+.tile.level-warn .tile-value {
+  color: var(--warn);
+}
+
+.tile.level-danger .tile-value {
+  color: var(--err);
+}
+
+.bar-fill.level-warn {
+  background: var(--warn);
+}
+
+.bar-fill.level-danger {
+  background: var(--err);
+}
+
+.core-group + .core-group {
+  margin-top: 6px;
+}
+
+.core-group {
+  display: grid;
+  gap: 3px;
+}
+
+.core-group-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.core-group-title.throttled,
+.core-group-title.throttled .muted {
+  color: var(--warn);
+}
+
+.process-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.process-toolbar .apps-search {
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.sort-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.sort-button.on {
+  color: var(--text);
+}
+
+.proc-table .pin-cell {
+  width: 20px;
+}
+
+.pin-button {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-dim);
+  opacity: 0;
+}
+
+.proc-table tr:hover .pin-button,
+.pin-button.on,
+.pin-button:focus-visible {
+  opacity: 1;
+}
+
+.pin-button.on {
+  color: var(--warn);
+}
+
+.proc-table tr.pinned td {
+  background: var(--surface-2);
+}
+
+.proc-table tr.missing .proc-name {
+  color: var(--text-dim);
+}
+
+.process-count {
+  margin: 4px 0 0;
+  font-size: 11px;
+}
+
+/* 投屏负载条：放在工具栏与画面之间，不盖住画面，不影响触控 */
+.mirror-hud {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 3px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.hud-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.hud-label {
+  color: var(--text-dim);
+}
+
+.hud-value {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-item.level-warn .hud-value,
+.hud-item.level-warn .hud-label {
+  color: var(--warn);
+}
+
+.hud-item.level-danger .hud-value,
+.hud-item.level-danger .hud-label {
+  color: var(--err);
+}
+
+.hud-spark path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.hud-item.level-warn .hud-spark path {
+  stroke: var(--warn);
+}
+
+.hud-item.level-danger .hud-spark path {
+  stroke: var(--err);
+}
+
+@container (max-width: 420px) {
+  .hud-spark {
+    display: none;
+  }
+}
+
+/* 独立的设备状态窗口 */
+.status-window {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg);
+}
+
+.status-window-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.status-window-bar select {
+  min-width: 0;
+  max-width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.status-window-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* ---------- 实时监控 M2：标记、应用视角 ---------- */
+
+.chart-wrap {
+  position: relative;
+}
+
+.chart-marker-tip {
+  position: absolute;
+  z-index: 2;
+  max-width: 280px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  box-shadow: 0 2px 8px var(--shadow);
+  font-size: 11px;
+  white-space: pre-line;
+  pointer-events: none;
+}
+
+.hud-app {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.hud-pkg {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.hud-item .hud-label:empty {
+  display: none;
+}
+
+.app-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-heading .spacer {
+  flex: 1;
+}
+
+.app-pkg {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-weight: 400;
+}
+
+.badge {
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.app-tiles {
+  margin-bottom: 8px;
+}
+
+.status-panel.wide .app-tiles {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+
+.status-subheading {
+  margin: 10px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+/* 宽布局里应用的四张图两两并排，窄布局里上下排 */
+.status-panel.wide .app-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  column-gap: 16px;
+}
+
+.frame-bars {
+  position: relative;
+  height: 120px;
+  margin-top: 6px;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.frame-bar {
+  position: absolute;
+  bottom: 0;
+  background: var(--accent);
+  border-left: 1px solid var(--surface);
+}
+
+.frame-bar.slow {
+  background: var(--err);
+}
+
+.frame-budget {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed var(--text-dim);
+  z-index: 1;
+}
+
+.frame-bars-empty {
+  font-size: 12px;
+}
+
+.proc-table tr.foreground .proc-name {
+  color: var(--accent);
+}
+
+.focus-button {
+  margin-left: 6px;
+  padding: 0 5px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-dim);
+  font-size: 10px;
+  opacity: 0;
+}
+
+.proc-table tr:hover .focus-button,
+.focus-button.on,
+.focus-button:focus-visible {
+  opacity: 1;
+}
+
+.focus-button.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  cursor: default;
+}
+
+.events-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 400;
+}
+
+.event-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.event-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 0 2px 6px;
+  background: none;
+  border: none;
+  border-left: 2px solid var(--border);
+  text-align: left;
+  font-size: 12px;
+}
+
+.event-item:hover {
+  background: var(--surface-2);
+}
+
+.event-item.tone-accent {
+  border-left-color: var(--accent);
+}
+
+.event-item.tone-warn {
+  border-left-color: var(--warn);
+}
+
+.event-item.tone-err {
+  border-left-color: var(--err);
+}
+
+.event-text {
+  white-space: nowrap;
+}
+
+.event-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.app-heading > :not(.app-pkg) {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* ---------- 实时监控 M3：工具条、回看、录制列表、告警设置 ---------- */
+
+.status-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-bottom: 8px;
+}
+
+.status-panel.wide .status-toolbar {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
+.status-toolbar .spacer {
+  flex: 1;
+}
+
+.toolbar-label {
+  font-size: 12px;
+}
+
+.record-toggle.on {
+  color: var(--err);
+}
+
+.replay-banner {
+  border-color: var(--accent);
+}
+
+.recordings-dialog {
+  width: 620px;
+}
+
+.recording-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.recording-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+}
+
+.recording-info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.recording-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alert-rules.is-off {
+  opacity: 0.5;
+}
+
+.alert-row {
+  display: grid;
+  grid-template-columns: 18px 1fr 80px minmax(64px, auto);
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.alert-master {
+  grid-template-columns: 18px 1fr;
+}
+
+.alert-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 2px 6px;
+  font: inherit;
+  text-align: right;
+}
+
+.alert-input:disabled {
+  opacity: 0.5;
+}
+
+.alert-unit {
+  font-size: 12px;
+}

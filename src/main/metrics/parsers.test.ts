@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   parseAccelerators,
+  cpuIowait,
   cpuUsage,
   loadCommand,
   parseBattery,
   parseCpuFreq,
+  parseCpuLimits,
+  parsePsi,
+  parseThermalStatus,
   parseDf,
   parseLoadavg,
   parseMeminfo,
@@ -17,8 +21,10 @@ import {
 } from './parsers'
 
 describe('loadCommand', () => {
-  it('joins 8 sections and only runs dumpsys when asked', () => {
-    expect(loadCommand(true).split(SEP)).toHaveLength(8)
+  it('joins 11 sections and only runs dumpsys when asked', () => {
+    expect(loadCommand(true).split(SEP)).toHaveLength(11)
+    expect(loadCommand(false).split(SEP)).toHaveLength(11)
+    expect(loadCommand(true)).toContain('dumpsys thermalservice')
     expect(loadCommand(true)).toContain('dumpsys battery')
     expect(loadCommand(false)).not.toContain('dumpsys')
   })
@@ -29,7 +35,7 @@ describe('parseProcStat / cpuUsage', () => {
   const b = parseProcStat('cpu  200 0 200 1000 100 0 0 0 0 0\ncpu0 150 0 50 400 0 0 0 0 0 0\ncpu2 50 0 50 500 0 0 0 0 0 0')
 
   it('treats idle + iowait as idle and keeps offline cores as holes', () => {
-    expect(a.all).toEqual({ busy: 200, total: 1000 })
+    expect(a.all).toEqual({ busy: 200, total: 1000, iowait: 0 })
     expect(a.cores[1]).toBeUndefined()
     expect(a.cores).toHaveLength(3)
   })
@@ -41,6 +47,60 @@ describe('parseProcStat / cpuUsage', () => {
     expect(cpuUsage(a.cores[2], b.cores[2])).toBe(0)
     expect(cpuUsage(undefined, b.all)).toBeNull()
     expect(cpuUsage(b.all, b.all)).toBeNull()
+  })
+
+  it('reports iowait separately', () => {
+    // iowait +100 / total +500
+    expect(cpuIowait(a.all, b.all)).toBe(20)
+    expect(cpuIowait(undefined, b.all)).toBeNull()
+  })
+})
+
+describe('parseCpuLimits', () => {
+  const base = '/sys/devices/system/cpu'
+  const line = (core: number, node: string, khz: number) => `${base}/cpu${core}/cpufreq/${node}:${khz}`
+
+  it('groups cores by hardware max frequency and takes the lowest limit per cluster', () => {
+    const text = [
+      ...[0, 1, 2, 3].map((c) => line(c, 'scaling_max_freq', 1804800)),
+      line(4, 'scaling_max_freq', 2419200),
+      line(5, 'scaling_max_freq', 1497600),
+      line(7, 'scaling_max_freq', 3187200),
+      ...[0, 1, 2, 3].map((c) => line(c, 'cpuinfo_max_freq', 1804800)),
+      line(4, 'cpuinfo_max_freq', 2419200),
+      line(5, 'cpuinfo_max_freq', 2419200),
+      line(7, 'cpuinfo_max_freq', 3187200)
+    ].join('\n')
+    expect(parseCpuLimits(text)).toEqual([
+      { cores: [0, 1, 2, 3], maxMHz: 1805, limitMHz: 1805 },
+      { cores: [4, 5], maxMHz: 2419, limitMHz: 1498 },
+      { cores: [7], maxMHz: 3187, limitMHz: 3187 }
+    ])
+  })
+
+  it('returns undefined when hardware max frequency is unreadable', () => {
+    expect(parseCpuLimits(line(0, 'scaling_max_freq', 1804800))).toBeUndefined()
+    expect(parseCpuLimits('')).toBeUndefined()
+  })
+})
+
+describe('parsePsi', () => {
+  it('reads some avg10 for each resource', () => {
+    const text = [
+      '/proc/pressure/cpu:some avg10=12.50 avg60=3.10 avg300=1.00 total=123',
+      '/proc/pressure/memory:some avg10=0.00 avg60=0.00 avg300=0.00 total=0',
+      '/proc/pressure/memory:full avg10=0.00 avg60=0.00 avg300=0.00 total=0',
+      '/proc/pressure/io:some avg10=4.20 avg60=1.00 avg300=0.50 total=9'
+    ].join('\n')
+    expect(parsePsi(text)).toEqual({ cpu: 12.5, memory: 0, io: 4.2 })
+    expect(parsePsi('')).toBeUndefined()
+  })
+})
+
+describe('parseThermalStatus', () => {
+  it('reads the status number', () => {
+    expect(parseThermalStatus('Thermal Status: 2\n')).toBe(2)
+    expect(parseThermalStatus('')).toBeUndefined()
   })
 })
 

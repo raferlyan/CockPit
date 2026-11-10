@@ -12,6 +12,8 @@ import { droppedPaths, handleDeviceDrop, hasDraggedFiles } from '../files/fileSt
 import { takeScreenshot } from '../apps/screenshot'
 import { t } from '../i18n'
 import { formatBytes } from '../metrics/format'
+import { MirrorHud } from '../metrics/MirrorHud'
+import { useSettingsStore } from '../settings/settingsStore'
 
 type ViewState = 'idle' | 'starting' | 'running' | 'error'
 interface Size {
@@ -51,6 +53,7 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
   const [videoSize, setVideoSize] = useState<Size | null>(null)
   const [stageSize, setStageSize] = useState<Size>({ width: 0, height: 0 })
   const [fps, setFps] = useState(0)
+  const showHud = useSettingsStore((s) => s.mirrorHud)
 
   const stageRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -421,6 +424,15 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
           <ToolButton label={t(t('通知栏'))} short={t(t('通知'))} disabledReason={keysDisabled} onClick={() => send({ type: 'expandNotificationPanel' })} />
           <ToolButton label={t(t('旋转'))} short="⟳" disabledReason={keysDisabled} onClick={() => send({ type: 'rotateDevice' })} />
           <ToolButton label={t(t('截图'))} short="📷" onClick={() => void takeScreenshot(device)} />
+          <button
+            className={`tool${showHud ? ' on' : ''}`}
+            title={showHud ? t('隐藏负载条') : t('在画面上方显示负载条')}
+            aria-pressed={showHud}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => useSettingsStore.getState().update({ mirrorHud: !showHud })}
+          >
+            {t('负载')}
+          </button>
           <RecordButton
             since={recordingSince}
             disabledReason={keysDisabled}
@@ -451,6 +463,8 @@ export function MirrorView({ device, active, hidden, multi, onActivate, onClose 
           ×
         </button>
       </div>
+
+      {showHud && device.state === 'device' && <MirrorHud serial={device.serial} />}
 
       <div className="mirror-stage" ref={stageRef}>
         {session && (

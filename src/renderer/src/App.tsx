@@ -32,6 +32,9 @@ import { LoggerExportDialog } from './files/LoggerExportDialog'
 import { useScreenshotStore } from './apps/screenshot'
 import { t, useLanguage } from './i18n'
 import { api } from './api'
+import { useMarkerShortcut } from './metrics/markers'
+
+const focusedSerialNow = () => useAppStore.getState().focusedSerial
 
 /** 收起后图标条的宽（左右）或高（底部），像素 */
 const STRIPE_SIZE = 28
@@ -57,7 +60,7 @@ export function App() {
   useGlobalErrorToasts()
   useEffect(() => connectStore(), [])
   useEffect(() => connectTerminals(), [])
-  useEffect(() => connectMetrics(), [])
+  useEffect(() => connectMetrics({ toastAlerts: true }), [])
   useEffect(() => connectTheme(), [])
   useEffect(() => connectSettings(), [])
   useEffect(() => connectTraces(), [])
@@ -71,6 +74,7 @@ export function App() {
   }, [language])
   useZoomShortcuts()
   useToolWindowShortcuts()
+  useMarkerShortcut(focusedSerialNow)
   const panes = useSettingsStore((s) => s.panes)
   const collapsed = useSettingsStore((s) => s.collapsed)
   const { settingsOpen, guideOpen, appsSerial, loggerSerial, traceOpen, rootSettings, oplogOpen } = useUiStore()

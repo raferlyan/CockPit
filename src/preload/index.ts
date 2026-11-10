@@ -38,7 +38,8 @@ const api: CockpitApi = {
   app: {
     onError: (listener) => subscribe(IpcChannel.AppError, listener),
     setZoom: (factor) => webFrame.setZoomFactor(Math.min(Math.max(factor, 0.7), 1.6)),
-    setLanguage: (language) => ipcRenderer.send(IpcChannel.AppSetLanguage, language)
+    setLanguage: (language) => ipcRenderer.send(IpcChannel.AppSetLanguage, language),
+    openStatusWindow: () => ipcRenderer.send(IpcChannel.AppOpenStatusWindow)
   },
   apps: {
     list: (serial) => ipcRenderer.invoke(IpcChannel.AppsList, serial),
@@ -112,7 +113,19 @@ const api: CockpitApi = {
   },
   metrics: {
     snapshot: (serial) => ipcRenderer.invoke(IpcChannel.MetricsSnapshot, serial),
-    onEvent: (listener) => subscribe(IpcChannel.MetricsEvent, listener)
+    onEvent: (listener) => subscribe(IpcChannel.MetricsEvent, listener),
+    setFocusApp: (serial, pkg) => ipcRenderer.invoke(IpcChannel.MetricsSetFocusApp, serial, pkg),
+    watchFrames: (serial, watching) => ipcRenderer.send(IpcChannel.MetricsWatchFrames, serial, watching),
+    addMarker: (serial, note) => ipcRenderer.invoke(IpcChannel.MetricsAddMarker, serial, note),
+    setAlertRules: (rules) => ipcRenderer.send(IpcChannel.MetricsSetAlertRules, rules),
+    startRecording: (serial) => ipcRenderer.invoke(IpcChannel.MetricsRecordStart, serial),
+    stopRecording: (serial) => ipcRenderer.invoke(IpcChannel.MetricsRecordStop, serial),
+    recordingStatus: () => ipcRenderer.invoke(IpcChannel.MetricsRecordStatus),
+    listRecordings: () => ipcRenderer.invoke(IpcChannel.MetricsRecordList),
+    loadRecording: (path) => ipcRenderer.invoke(IpcChannel.MetricsRecordLoad, path),
+    deleteRecording: (path) => ipcRenderer.invoke(IpcChannel.MetricsRecordDelete, path),
+    openRecordingDir: () => ipcRenderer.invoke(IpcChannel.MetricsRecordOpenDir),
+    saveExport: (defaultName, text) => ipcRenderer.invoke(IpcChannel.MetricsSaveExport, defaultName, text)
   }
 }
 

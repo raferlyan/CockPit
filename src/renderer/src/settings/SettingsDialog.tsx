@@ -1,3 +1,4 @@
+import { AlertSettings } from './AlertSettings'
 import { useEffect, useState } from 'react'
 import { ThemeSwitch } from '../theme/ThemeSwitch'
 import { DEFAULT_TERMINAL_FONT, useSettingsStore, type Language } from './settingsStore'
@@ -170,6 +171,8 @@ export function SettingsDialog() {
             onChange={(e) => settings.update({ terminalFontSize: Number(e.target.value) })}
           />
         </label>
+
+        <AlertSettings />
 
         <h3 className="status-heading">{t('布局')}</h3>
         <p className="muted settings-tip">

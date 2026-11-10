@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { api } from '../api'
 import { setLanguage, type Language } from '../i18n'
+import { DEFAULT_ALERT_RULES, normalizeAlertRules, type AlertRules } from '@shared/alerts'
 
 export type { Language }
 
@@ -32,6 +33,10 @@ export interface Settings {
   language: Language
   panes: PaneSizes
   collapsed: CollapsedPanes
+  /** 投屏画面上方显示负载条 */
+  mirrorHud: boolean
+  /** 状态告警规则，交给主进程判定 */
+  alerts: AlertRules
 }
 
 /** Windows Terminal Preview 的默认字体，随应用打包，macOS 上同样可用 */
@@ -49,7 +54,9 @@ export const DEFAULT_SETTINGS: Settings = {
   terminalFontSize: 12,
   language: defaultLanguage(),
   panes: DEFAULT_PANES,
-  collapsed: DEFAULT_COLLAPSED
+  collapsed: DEFAULT_COLLAPSED,
+  mirrorHud: true,
+  alerts: DEFAULT_ALERT_RULES
 }
 
 /** 首次启动按系统语言选择，中文系统用中文，其余用英文 */
@@ -72,7 +79,13 @@ const KEY = 'cockpit.settings'
 function load(): Settings {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<Settings>
-    return { ...DEFAULT_SETTINGS, ...saved, panes: { ...DEFAULT_PANES, ...saved.panes }, collapsed: { ...DEFAULT_COLLAPSED, ...saved.collapsed } }
+    return {
+      ...DEFAULT_SETTINGS,
+      ...saved,
+      panes: { ...DEFAULT_PANES, ...saved.panes },
+      collapsed: { ...DEFAULT_COLLAPSED, ...saved.collapsed },
+      alerts: normalizeAlertRules(saved.alerts)
+    }
   } catch {
     return DEFAULT_SETTINGS
   }
@@ -101,8 +114,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
   const commit = (patch: Partial<Settings>) => {
     set(patch)
     if (patch.language) setLanguage(patch.language)
-    const { uiScale, uiFont, monoFont, terminalFont, terminalFontSize, language, panes, collapsed } = get()
-    save({ uiScale, uiFont, monoFont, terminalFont, terminalFontSize, language, panes, collapsed })
+    const { uiScale, uiFont, monoFont, terminalFont, terminalFontSize, language, panes, collapsed, mirrorHud, alerts } = get()
+    save({ uiScale, uiFont, monoFont, terminalFont, terminalFontSize, language, panes, collapsed, mirrorHud, alerts })
   }
   return {
     ...load(),
@@ -133,8 +146,11 @@ export function connectSettings(): () => void {
     root.setProperty('--mono', monoFontStack(s.monoFont))
   }
   apply(useSettingsStore.getState())
+  // 告警在主进程判定，启动时和规则变化时同步过去
+  api.metrics.setAlertRules(useSettingsStore.getState().alerts)
   return useSettingsStore.subscribe((s, prev) => {
     if (s.uiScale !== prev.uiScale || s.uiFont !== prev.uiFont || s.monoFont !== prev.monoFont) apply(s)
+    if (s.alerts !== prev.alerts) api.metrics.setAlertRules(s.alerts)
   })
 }
 

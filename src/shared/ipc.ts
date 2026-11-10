@@ -1,4 +1,5 @@
-import type { MetricsEvent, MetricsSnapshot } from './metrics'
+import type { MetricsEvent, MetricsMarker, MetricsRecordingFile, MetricsRecordingState, MetricsSnapshot, RecordedSession } from './metrics'
+import type { AlertRules } from './alerts'
 import type { ControlInput, MirrorEvent, MirrorOptions, MirrorSessionInfo, RecordingInfo } from './mirror'
 import type { AdbStatus, Device } from './models'
 import type { TerminalEvent, TerminalOpenOptions, TerminalSessionInfo } from './terminal'
@@ -35,6 +36,18 @@ export const IpcChannel = {
   TerminalEvent: 'terminal:event',
   MetricsSnapshot: 'metrics:snapshot',
   MetricsEvent: 'metrics:event',
+  MetricsSetFocusApp: 'metrics:setFocusApp',
+  MetricsWatchFrames: 'metrics:watchFrames',
+  MetricsAddMarker: 'metrics:addMarker',
+  MetricsSetAlertRules: 'metrics:setAlertRules',
+  MetricsRecordStart: 'metrics:recordStart',
+  MetricsRecordStop: 'metrics:recordStop',
+  MetricsRecordStatus: 'metrics:recordStatus',
+  MetricsRecordList: 'metrics:recordList',
+  MetricsRecordLoad: 'metrics:recordLoad',
+  MetricsRecordDelete: 'metrics:recordDelete',
+  MetricsRecordOpenDir: 'metrics:recordOpenDir',
+  MetricsSaveExport: 'metrics:saveExport',
   SerialList: 'serial:list',
   TerminalOpenSerial: 'terminal:openSerial',
   FilesList: 'files:list',
@@ -63,6 +76,8 @@ export const IpcChannel = {
   AppsPids: 'apps:pids',
   DeviceSaveImage: 'device:saveImage',
   AppSetLanguage: 'app:setLanguage',
+  /** 打开（或聚焦）独立的设备状态窗口 */
+  AppOpenStatusWindow: 'app:openStatusWindow',
   AppsList: 'apps:list',
   AppsRun: 'apps:run',
   AppsExport: 'apps:export',
@@ -128,6 +143,8 @@ export interface CockpitApi {
     setZoom(factor: number): void
     /** 主进程的对话框标题、错误信息跟随界面语言 */
     setLanguage(language: 'zh' | 'en'): void
+    /** 在独立窗口中打开设备状态；已打开时把它提到前面 */
+    openStatusWindow(): void
   }
   apps: {
     /** 全量扫描设备上的应用（含系统应用、已对当前用户卸载的系统应用） */
@@ -238,5 +255,25 @@ export interface CockpitApi {
     snapshot(serial: string): Promise<MetricsSnapshot>
     /** 所有在线设备的实时推送 */
     onEvent(listener: (event: MetricsEvent) => void): () => void
+    /** 固定关注某个应用；传 null 恢复跟随前台 */
+    setFocusApp(serial: string, pkg: string | null): Promise<void>
+    /** 界面上开始 / 停止显示这台设备的帧率；主进程按窗口计数，没人看时不采 */
+    watchFrames(serial: string, watching: boolean): void
+    /** 手动在时间轴上打一个标记 */
+    addMarker(serial: string, note?: string): Promise<MetricsMarker | undefined>
+    /** 告警规则（来自界面设置），对所有设备生效 */
+    setAlertRules(rules: AlertRules): void
+    /** 开始把这台设备的采集数据写到文件 */
+    startRecording(serial: string): Promise<MetricsRecordingState>
+    stopRecording(serial: string): Promise<MetricsRecordingFile | undefined>
+    /** 正在录制的设备 */
+    recordingStatus(): Promise<Record<string, MetricsRecordingState>>
+    listRecordings(): Promise<MetricsRecordingFile[]>
+    loadRecording(path: string): Promise<RecordedSession>
+    /** 移到废纸篓 */
+    deleteRecording(path: string): Promise<void>
+    openRecordingDir(): Promise<void>
+    /** 弹出保存对话框写导出文件（.csv / .json），取消时返回 null */
+    saveExport(defaultName: string, text: string): Promise<string | null>
   }
 }

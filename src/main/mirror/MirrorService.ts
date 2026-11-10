@@ -113,6 +113,11 @@ export class MirrorService {
     return result
   }
 
+  /** 会话所属设备，给时间轴打输入标记用 */
+  serialOf(sessionId: string): string | undefined {
+    return this.sessions.get(sessionId)?.session.serial
+  }
+
   control(sessionId: string, input: ControlInput): void {
     const session = this.sessions.get(sessionId)?.session
     if (!session) return
