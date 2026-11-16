@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { suggest, type CompletionContext } from './completion'
+import { suggest, type CompletionContext } from '@shared/shell/completion'
 
 const ctx: CompletionContext = { history: [], packages: ['com.android.settings', 'com.example.app', 'com.tencent.mm'] }
 const labels = (line: string, c = ctx) => suggest(line, c).map((s) => s.label)

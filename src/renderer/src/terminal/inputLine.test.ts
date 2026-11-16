@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractCommand } from './inputLine'
+import { extractCommand } from '@shared/shell/inputLine'
 
 describe('extractCommand', () => {
   it('takes the text after an Android prompt', () => {

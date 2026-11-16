@@ -79,6 +79,8 @@ export const IpcChannel = {
   /** 打开（或聚焦）独立的设备状态窗口 */
   AppOpenStatusWindow: 'app:openStatusWindow',
   AppsList: 'apps:list',
+  AppsRunning: 'apps:running',
+  AppsClearBackground: 'apps:clear-background',
   AppsRun: 'apps:run',
   AppsExport: 'apps:export',
   AppsInstall: 'apps:install',
@@ -149,6 +151,8 @@ export interface CockpitApi {
   apps: {
     /** 全量扫描设备上的应用（含系统应用、已对当前用户卸载的系统应用） */
     list(serial: string): Promise<AppPackage[]>
+    running(serial: string, packages: string[]): Promise<string[]>
+    clearBackground(serial: string): Promise<void>
     /** 卸载、恢复、停用、启用、强制停止、清除数据；返回 pm 的输出 */
     run(serial: string, pkg: string, action: AppAction, kind: AppPackage['kind']): Promise<string>
     /** 把 base.apk 下载到本机目录，返回本机文件路径 */

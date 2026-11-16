@@ -9,10 +9,11 @@ import { droppedPaths, hasDraggedFiles, installApks } from '../files/fileStore'
 import { useUiStore } from '../settings/uiStore'
 import { formatDateTime, t } from '../i18n'
 
-type Filter = 'user' | 'system' | 'disabled' | 'uninstalled' | 'all'
+type Filter = 'running' | 'user' | 'system' | 'disabled' | 'uninstalled' | 'all'
 type Sort = 'name' | 'installed' | 'updated'
 
 const FILTERS: Array<{ key: Filter; label: () => string; match: (a: AppPackage) => boolean }> = [
+  { key: 'running', label: () => t('运行中'), match: () => true },
   { key: 'user', label: () => t('用户应用'), match: (a) => a.kind === 'user' && !a.uninstalled },
   { key: 'system', label: () => t('系统应用'), match: (a) => a.kind === 'system' && !a.uninstalled },
   { key: 'disabled', label: () => t('已停用'), match: (a) => a.disabled && !a.uninstalled },
@@ -84,6 +85,7 @@ export function AppManagerDialog({ serial }: { serial: string }) {
   const close = () => useUiStore.getState().openApps(null)
 
   const [apps, setApps] = useState<AppPackage[] | null>(null)
+  const [running, setRunning] = useState<Set<string>>(new Set())
   const [loadError, setLoadError] = useState<string | null>(null)
   const [filter, setFilter] = useState<Filter>('user')
   const [sort, setSort] = useState<Sort>('name')
@@ -95,11 +97,41 @@ export function AppManagerDialog({ serial }: { serial: string }) {
   const scan = useCallback(async () => {
     setLoadError(null)
     try {
-      setApps(await api.apps.list(serial))
+      const list = await api.apps.list(serial)
+      setApps(list)
+      try {
+        setRunning(new Set(await api.apps.running(serial, list.map((app) => app.name))))
+      } catch (error) {
+        setRunning(new Set())
+        notify('error', t('读取运行状态失败'), errorMessage(error))
+      }
     } catch (error) {
       setLoadError(errorMessage(error))
     }
   }, [serial])
+
+  const refreshRunning = async () => {
+    if (!apps) return
+    try {
+      setRunning(new Set(await api.apps.running(serial, apps.map((app) => app.name))))
+    } catch (error) {
+      notify('error', t('读取运行状态失败'), errorMessage(error))
+    }
+  }
+
+  const clearBackground = async () => {
+    if (!window.confirm(t('清理设备上的后台进程？正在运行的后台服务可能重新启动。'))) return
+    setBusy(t('正在清理后台进程…'))
+    try {
+      await api.apps.clearBackground(serial)
+      await refreshRunning()
+      notify('success', t('已请求设备清理后台进程'))
+    } catch (error) {
+      notify('error', t('清理后台失败'), errorMessage(error))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   useEffect(() => {
     if (online) void scan()
@@ -111,17 +143,17 @@ export function AppManagerDialog({ serial }: { serial: string }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [busy])
 
-  const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.key, apps?.filter(f.match).length ?? 0])) as Record<Filter, number>, [apps])
+  const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.key, apps?.filter((a) => f.match(a) && (f.key !== 'running' || running.has(a.name))).length ?? 0])) as Record<Filter, number>, [apps, running])
 
   const visible = useMemo(() => {
     const match = FILTERS.find((f) => f.key === filter)!.match
     const q = query.trim().toLowerCase()
-    const list = (apps ?? []).filter((a) => match(a) && (!q || a.name.toLowerCase().includes(q)))
+    const list = (apps ?? []).filter((a) => match(a) && (filter !== 'running' || running.has(a.name)) && (!q || a.name.toLowerCase().includes(q)))
     // 新的在前；取不到时间的排最后
     if (sort === 'installed') list.sort((a, b) => (b.firstInstallTime ?? 0) - (a.firstInstallTime ?? 0))
     if (sort === 'updated') list.sort((a, b) => (b.lastUpdateTime ?? 0) - (a.lastUpdateTime ?? 0))
     return list
-  }, [apps, filter, query, sort])
+  }, [apps, filter, query, sort, running])
 
   const selectedApps = visible.filter((a) => selected.has(a.name))
 
@@ -151,10 +183,11 @@ export function AppManagerDialog({ serial }: { serial: string }) {
     if (failures.length) notify('error', t('{n} 个应用{action}失败', { n: failures.length, action: label }), failures.slice(0, 3).join('\n'))
     else if (action === 'launch') notify('success', t('已在设备上打开 {name}', { name: targets[0].name }))
     else notify('success', t('已{action} {names}', { action: label, names: targets.length > 1 ? t('{n} 个应用', { n: targets.length }) : targets[0].name }))
-    if (action === 'launch') return
+    if (action === 'launch') { void refreshRunning(); return }
     setSelected(new Set())
     // 强制停止不改变列表，其余操作重新扫描
     if (action !== 'forceStop') void scan()
+    else void refreshRunning()
   }
 
   const exportApk = async (app: AppPackage) => {
@@ -226,6 +259,12 @@ export function AppManagerDialog({ serial }: { serial: string }) {
           <ActionButton className="secondary" disabledReason={busyReason} onClick={() => void scan()}>
             {t('重新扫描')}
           </ActionButton>
+          <ActionButton className="secondary" disabledReason={busyReason || (!apps && t('正在扫描'))} onClick={() => void refreshRunning()}>
+            {t('刷新运行状态')}
+          </ActionButton>
+          <ActionButton className="secondary danger" disabledReason={busyReason || (!apps && t('正在扫描'))} onClick={() => void clearBackground()}>
+            {t('一键清空后台')}
+          </ActionButton>
           <ActionButton className="primary" disabledReason={busyReason} onClick={() => void api.files.pickApk().then(install)}>
             {t('安装 APK…')}
           </ActionButton>
@@ -280,6 +319,7 @@ export function AppManagerDialog({ serial }: { serial: string }) {
                     </td>
                     <td className="apps-tags">
                       <span className={`tag${app.kind === 'system' ? ' system' : ''}`}>{app.kind === 'system' ? t('系统') : t('用户')}</span>
+                      {running.has(app.name) && <span className="tag">{t('运行中')}</span>}
                       {app.disabled && <span className="tag warn">{t('已停用')}</span>}
                       {app.uninstalled && <span className="tag err">{t('已卸载')}</span>}
                     </td>

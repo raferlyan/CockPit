@@ -32,6 +32,24 @@ export class AppService {
     return parsePackageList({ all, installed, third, disabled, times })
   }
 
+  /** 一次读取设备进程，按已安装包名匹配主进程和 :service 等子进程。 */
+  async running(serial: string, packages: string[]): Promise<string[]> {
+    const out = await this.adb.shell(serial, 'ps -A -o NAME', { timeout: 20_000 })
+    const installed = new Set(packages)
+    const running = new Set<string>()
+    for (const line of out.split(/\r?\n/)) {
+      const process = line.trim().split(/\s+/).at(-1) ?? ''
+      const pkg = process.split(':')[0]
+      if (installed.has(pkg)) running.add(pkg)
+    }
+    return [...running]
+  }
+
+  /** 请求 Android 清理可回收的后台进程。 */
+  async clearBackground(serial: string): Promise<void> {
+    await this.adb.shell(serial, 'am kill-all', { timeout: 30_000 })
+  }
+
   /** 包名对应的进程号；主进程和 :remote 等子进程都算 */
   async pids(serial: string, pkg: string): Promise<number[]> {
     if (!PACKAGE_NAME.test(pkg)) throw new Error(`包名不合法：${pkg}`)

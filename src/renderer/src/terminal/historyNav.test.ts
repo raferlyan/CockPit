@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HistoryNav } from './historyNav'
+import { HistoryNav } from '@shared/shell/historyNav'
 
 const nav = (history = ['newest', 'mid', 'oldest']) => new HistoryNav(() => history)
 
