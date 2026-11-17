@@ -33,6 +33,7 @@ import { useScreenshotStore } from './apps/screenshot'
 import { t, useLanguage } from './i18n'
 import { api } from './api'
 import { useMarkerShortcut } from './metrics/markers'
+import { mirrorWorkspace } from './mirror/workspace'
 
 const focusedSerialNow = () => useAppStore.getState().focusedSerial
 
@@ -78,10 +79,13 @@ export function App() {
   const panes = useSettingsStore((s) => s.panes)
   const collapsed = useSettingsStore((s) => s.collapsed)
   const { settingsOpen, guideOpen, appsSerial, loggerSerial, traceOpen, rootSettings, oplogOpen } = useUiStore()
-  // 默认中间显示设备状态；有投屏窗格时投屏占中间，状态挪到右侧
-  const mirroring = useAppStore((s) => s.mirrorTiles.length > 0)
+  const focusedSerial = useAppStore((s) => s.focusedSerial)
+  const mirrorTiles = useAppStore((s) => s.mirrorTiles)
+  const mirrorLayout = useAppStore((s) => s.mirrorLayout)
+  const mirrorView = mirrorWorkspace(mirrorLayout, focusedSerial, mirrorTiles)
+  const hasMirrorSessions = mirrorTiles.length > 0
   // Perfetto 打开时占中间；投屏窗格只是隐藏，会话不断，收起后原样回来
-  const statusAside = mirroring || traceOpen
+  const statusAside = mirrorView.showMirror || traceOpen
   const transfer = useFileStore((s) => s.transfer !== null)
   const traceDialogSerial = useTraceStore((s) => s.dialogSerial)
   const shot = useScreenshotStore((s) => s.shot)
@@ -111,18 +115,17 @@ export function App() {
             <TraceView />
           </ErrorBoundary>
         )}
-        {mirroring ? (
-          <div className={traceOpen ? 'is-hidden' : 'contents'}>
+        {hasMirrorSessions && (
+          <div className={traceOpen || !mirrorView.showMirror ? 'is-hidden' : 'contents'}>
             <ErrorBoundary name={t('投屏区')} className="mirror-area">
               <MirrorGrid />
             </ErrorBoundary>
           </div>
-        ) : (
-          !traceOpen && (
-            <ErrorBoundary name={t('设备状态')} className="panel center-status">
-              <StatusPanel wide />
-            </ErrorBoundary>
-          )
+        )}
+        {!traceOpen && mirrorView.showStatus && (
+          <ErrorBoundary name={t('设备状态')} className="panel center-status">
+            <StatusPanel wide />
+          </ErrorBoundary>
         )}
         {collapsed.side ? (
           <ToolStripe pane="side" />

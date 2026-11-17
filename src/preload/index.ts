@@ -44,7 +44,6 @@ const api: CockpitApi = {
   apps: {
     list: (serial) => ipcRenderer.invoke(IpcChannel.AppsList, serial),
     running: (serial, packages) => ipcRenderer.invoke(IpcChannel.AppsRunning, serial, packages),
-    clearBackground: (serial) => ipcRenderer.invoke(IpcChannel.AppsClearBackground, serial),
     run: (serial, pkg, action, kind) => ipcRenderer.invoke(IpcChannel.AppsRun, serial, pkg, action, kind),
     exportApk: (serial, pkg, apkPath, localDir) => ipcRenderer.invoke(IpcChannel.AppsExport, serial, pkg, apkPath, localDir),
     install: (serial, apkPaths) => ipcRenderer.invoke(IpcChannel.AppsInstall, serial, apkPaths),

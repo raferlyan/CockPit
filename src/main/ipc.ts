@@ -224,7 +224,6 @@ export function registerIpc(ctx: {
   })
   handle(IpcChannel.AppsList, (_e, serial: string) => requireApps().list(serial))
   handle(IpcChannel.AppsRunning, (_e, serial: string, packages: string[]) => requireApps().running(serial, packages))
-  handle(IpcChannel.AppsClearBackground, (_e, serial: string) => requireApps().clearBackground(serial))
   handle(IpcChannel.AppsRun, (_e, serial: string, pkg: string, action: AppAction, kind: AppPackage['kind']) =>
     requireApps().run(serial, pkg, action, kind)
   )

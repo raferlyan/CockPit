@@ -119,20 +119,6 @@ export function AppManagerDialog({ serial }: { serial: string }) {
     }
   }
 
-  const clearBackground = async () => {
-    if (!window.confirm(t('清理设备上的后台进程？正在运行的后台服务可能重新启动。'))) return
-    setBusy(t('正在清理后台进程…'))
-    try {
-      await api.apps.clearBackground(serial)
-      await refreshRunning()
-      notify('success', t('已请求设备清理后台进程'))
-    } catch (error) {
-      notify('error', t('清理后台失败'), errorMessage(error))
-    } finally {
-      setBusy(null)
-    }
-  }
-
   useEffect(() => {
     if (online) void scan()
   }, [online, scan])
@@ -261,9 +247,6 @@ export function AppManagerDialog({ serial }: { serial: string }) {
           </ActionButton>
           <ActionButton className="secondary" disabledReason={busyReason || (!apps && t('正在扫描'))} onClick={() => void refreshRunning()}>
             {t('刷新运行状态')}
-          </ActionButton>
-          <ActionButton className="secondary danger" disabledReason={busyReason || (!apps && t('正在扫描'))} onClick={() => void clearBackground()}>
-            {t('一键清空后台')}
           </ActionButton>
           <ActionButton className="primary" disabledReason={busyReason} onClick={() => void api.files.pickApk().then(install)}>
             {t('安装 APK…')}

@@ -43,7 +43,7 @@ const ICONS: Record<Pane, ReactNode> = {
 
 /** 区域标题栏右侧的「收起」按钮 */
 export function CollapseButton({ pane }: { pane: Pane }) {
-  const arrow = pane === 'sidebar' ? '‹' : pane === 'side' ? '›' : '⌄'
+  const path = pane === 'sidebar' ? 'M10 4 6 8l4 4' : pane === 'side' ? 'M6 4l4 4-4 4' : 'M4 6l4 4 4-4'
   return (
     <button
       className="collapse-button"
@@ -52,7 +52,9 @@ export function CollapseButton({ pane }: { pane: Pane }) {
       aria-label={t('收起{name}', { name: PANE_LABEL()[pane] })}
       onClick={() => useSettingsStore.getState().toggleCollapsed(pane, true)}
     >
-      {arrow}
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path d={path} />
+      </svg>
     </button>
   )
 }

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { createPortal } from 'react-dom'
 import type { Device } from '@shared/models'
 import { api } from '../api'
 import { ActionButton } from '../notify/ActionButton'
@@ -45,11 +46,14 @@ export function DeviceList() {
       </ul>
 
       <ConnectForm />
-      {menu && menuDevice && (
-        <Exit key={`${menu.x},${menu.y}`}>
-          <DeviceContextMenu device={menuDevice} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />
-        </Exit>
-      )}
+      {menu &&
+        menuDevice &&
+        createPortal(
+          <Exit key={`${menu.x},${menu.y}`}>
+            <DeviceContextMenu device={menuDevice} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />
+          </Exit>,
+          document.body
+        )}
     </aside>
   )
 }

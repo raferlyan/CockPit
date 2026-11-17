@@ -4,6 +4,7 @@ import { useUiStore } from './uiStore'
 import { useSettingsStore, type CollapsedPanes } from './settingsStore'
 import { HIDE_ALL_SHORTCUT, paneShortcut } from './ToolStripe'
 import { t } from '../i18n'
+import { tourCollapsed } from './tourLayout'
 
 const isMac = window.cockpit.platform === 'darwin'
 
@@ -220,7 +221,7 @@ function placeCard(box: Box, card: { w: number; h: number }): { left: number; to
 
 /**
  * 聚光灯式使用向导：其余界面压暗并模糊，只把当前讲解的按钮或区域框出来，旁边的卡片说明它的作用。
- * 开始时展开所有收起的区域，讲到 Perfetto 时打开查看器，结束后恢复原样。
+ * 只在当前步骤需要时临时展开对应区域，讲到 Perfetto 时打开查看器，结束后恢复原样。
  */
 export function GuideTour() {
   const finishGuide = useUiStore((s) => s.finishGuide)
@@ -237,15 +238,17 @@ export function GuideTour() {
   // 记下进入向导前的布局，结束时恢复
   const saved = useRef<{ collapsed: CollapsedPanes; traceOpen: boolean } | null>(null)
   useEffect(() => {
-    const settings = useSettingsStore.getState()
-    saved.current = { collapsed: settings.collapsed, traceOpen: useUiStore.getState().traceOpen }
-    settings.update({ collapsed: { sidebar: false, side: false, terminal: false } })
+    saved.current = { collapsed: useSettingsStore.getState().collapsed, traceOpen: useUiStore.getState().traceOpen }
     return () => {
       if (!saved.current) return
-      useSettingsStore.getState().update({ collapsed: saved.current.collapsed })
+      useSettingsStore.setState({ collapsed: saved.current.collapsed })
       useUiStore.getState().setTraceOpen(saved.current.traceOpen)
     }
   }, [])
+
+  useEffect(() => {
+    if (saved.current) useSettingsStore.setState({ collapsed: tourCollapsed(saved.current.collapsed, step.target) })
+  }, [step.target])
 
   useEffect(() => {
     useUiStore.getState().setTraceOpen(Boolean(step.trace) || (saved.current?.traceOpen ?? false))

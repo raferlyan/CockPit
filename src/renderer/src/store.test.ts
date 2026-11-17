@@ -15,6 +15,13 @@ beforeEach(() => {
 })
 
 describe('mirror tiles', () => {
+  it('starts in single-device workspace mode', async () => {
+    vi.resetModules()
+    const fresh = await import('./store')
+
+    expect(fresh.useAppStore.getState().mirrorLayout).toBe('single')
+  })
+
   it('does not mirror automatically; tiles are added on demand and survive focus changes', () => {
     state().setDevices([device('a'), device('b')])
     expect(state().focusedSerial).toBe('a')
@@ -47,12 +54,13 @@ describe('mirror tiles', () => {
     expect(state().mirrorTiles).toEqual(['a', 'b', 'c', 'd'])
   })
 
-  it('moves focus to a remaining tile when closing the shown tile in single layout', () => {
+  it('keeps the current device workspace focused when its mirror closes', () => {
     state().setDevices([device('a'), device('b')])
     state().addTile('a')
     state().addTile('b')
     state().setMirrorLayout('single')
     state().removeTile('b')
-    expect(state().focusedSerial).toBe('a')
+    expect(state().focusedSerial).toBe('b')
+    expect(state().mirrorTiles).toEqual(['a'])
   })
 })

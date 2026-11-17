@@ -7,6 +7,7 @@ import { useTerminalStore } from '../terminal/terminalStore'
 import { useUiStore } from '../settings/uiStore'
 import { enterRoot, exitRoot, METHOD_LABEL } from './rootActions'
 import { t } from '../i18n'
+import { isOutsideDeviceMenu } from './deviceMenuDismiss'
 
 /**
  * 设备列表的右键菜单：用默认方式进入 root、临时换一种方式、打开 root 终端、退出 root、配置 root 方式。
@@ -32,17 +33,18 @@ export function DeviceContextMenu({ device, x, y, onClose }: { device: Device; x
   }, [x, y, method])
 
   useEffect(() => {
-    const close = (e: Event) => {
-      if (e instanceof KeyboardEvent && e.key !== 'Escape') return
-      onClose()
+    const onPointerDown = (e: PointerEvent) => {
+      if (isOutsideDeviceMenu(ref.current, e.target as Node | null)) onClose()
     }
-    window.addEventListener('mousedown', close)
-    window.addEventListener('keydown', close)
-    window.addEventListener('blur', close)
+    const onKeyDown = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const onBlur = () => onClose()
+    window.addEventListener('pointerdown', onPointerDown, true)
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('blur', onBlur)
     return () => {
-      window.removeEventListener('mousedown', close)
-      window.removeEventListener('keydown', close)
-      window.removeEventListener('blur', close)
+      window.removeEventListener('pointerdown', onPointerDown, true)
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('blur', onBlur)
     }
   }, [onClose])
 

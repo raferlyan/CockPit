@@ -35,7 +35,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   adbStatus: null,
   focusedSerial: null,
   mirrorTiles: [],
-  mirrorLayout: 'grid',
+  mirrorLayout: 'single',
   setDevices: (devices) => {
     const { focusedSerial, mirrorTiles } = get()
     // 焦点设备掉线时切到第一台可用设备
@@ -59,13 +59,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     set({ mirrorTiles: [...mirrorTiles, serial], focusedSerial: serial })
   },
-  removeTile: (serial) =>
-    set((s) => {
-      const mirrorTiles = s.mirrorTiles.filter((t) => t !== serial)
-      // 单台模式下关掉当前窗格时，切到剩下的窗格，避免投屏区空着
-      const focusedSerial = s.focusedSerial === serial && s.mirrorLayout === 'single' && mirrorTiles.length ? mirrorTiles[0] : s.focusedSerial
-      return { mirrorTiles, focusedSerial }
-    }),
+  removeTile: (serial) => set((s) => ({ mirrorTiles: s.mirrorTiles.filter((t) => t !== serial) })),
   closeMirrors: () => set({ mirrorTiles: [] }),
   setMirrorLayout: (mirrorLayout) => set({ mirrorLayout })
 }))

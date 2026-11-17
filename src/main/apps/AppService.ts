@@ -45,11 +45,6 @@ export class AppService {
     return [...running]
   }
 
-  /** 请求 Android 清理可回收的后台进程。 */
-  async clearBackground(serial: string): Promise<void> {
-    await this.adb.shell(serial, 'am kill-all', { timeout: 30_000 })
-  }
-
   /** 包名对应的进程号；主进程和 :remote 等子进程都算 */
   async pids(serial: string, pkg: string): Promise<number[]> {
     if (!PACKAGE_NAME.test(pkg)) throw new Error(`包名不合法：${pkg}`)

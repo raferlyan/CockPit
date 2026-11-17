@@ -44,7 +44,7 @@ export const DEFAULT_TERMINAL_FONT = 'Cascadia Mono'
 
 export const DEFAULT_PANES: PaneSizes = { sidebar: 240, side: 340, terminal: 260 }
 
-export const DEFAULT_COLLAPSED: CollapsedPanes = { sidebar: false, side: false, terminal: false }
+export const DEFAULT_COLLAPSED: CollapsedPanes = { sidebar: false, side: false, terminal: true }
 
 export const DEFAULT_SETTINGS: Settings = {
   uiScale: 1,
