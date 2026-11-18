@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Cockpit 自 v0.2.0 至 v0.9.2 的新增功能汇报">
+  <title>Cockpit v0.9.2 · 新增功能汇报</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --background: #0d1420;
+      --panel: #152132;
+      --line: #334459;
+      --text: #f0f5fb;
+      --muted: #b1c0d1;
+      --accent: #80e6ce;
+      --mono: ui-monospace, "SF Mono", Consolas, monospace;
+      font: 16px/1.7 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-padding-top: 5rem; }
+    body { margin: 0; background: var(--background); color: var(--text); }
+    a { color: var(--accent); text-underline-offset: .2em; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+    h1, h2, h3, p, figure { margin: 0; }
+    h1, h2, h3 { line-height: 1.24; text-wrap: balance; }
+    h1 { font-size: clamp(2.35rem, 5.8vw, 4.65rem); letter-spacing: -.045em; }
+    h2 { font-size: clamp(1.7rem, 3.4vw, 2.75rem); letter-spacing: -.035em; }
+    h3 { font-size: 1.08rem; }
+    img { display: block; max-width: 100%; height: auto; }
+    .wrap { width: min(1120px, calc(100% - 48px)); margin-inline: auto; }
+    .top { position: sticky; top: 0; z-index: 1; background: #0d1420; border-bottom: 1px solid var(--line); }
+    .top .wrap, .brand, nav, .actions { display: flex; align-items: center; gap: 1rem; }
+    .top .wrap { min-height: 64px; justify-content: space-between; }
+    .brand { color: var(--text); text-decoration: none; font-weight: 760; gap: .6rem; }
+    nav a { font-size: .88rem; color: var(--muted); text-decoration: none; }
+    nav a:hover { color: var(--text); }
+    .hero { background: radial-gradient(ellipse at 90% 0%, #1b3946, transparent 68%); }
+    .hero .wrap { padding-block: clamp(3.2rem, 7vw, 5.5rem); }
+    .label { color: var(--accent); font: 600 .83rem/1.6 var(--mono); letter-spacing: .04em; }
+    .hero h1, .chapter h2 { margin-block: .65rem 1rem; }
+    .lead, .chapter p, footer { color: var(--muted); }
+    .lead { max-width: 40em; font-size: 1.05rem; }
+    .actions { flex-wrap: wrap; margin-top: 1.6rem; gap: .7rem; }
+    .button { display: inline-block; padding: .58rem 1rem; border: 1px solid var(--line); border-radius: 8px; text-decoration: none; font-weight: 650; }
+    .primary { color: #102620; background: var(--accent); border-color: var(--accent); }
+    .panel { border: 1px solid var(--line); border-radius: 15px; background: var(--panel); overflow: hidden; }
+    .note, figcaption { color: var(--muted); font-size: .82rem; }
+    .chapter { padding-block: clamp(2.7rem, 6vw, 5rem); border-top: 1px solid var(--line); }
+    .split { display: grid; grid-template-columns: 1fr 1.12fr; align-items: center; gap: clamp(1.5rem, 5vw, 4rem); }
+    .shot { display: block; }
+    .shot img { width: 100%; }
+    .shot + figcaption { padding: .65rem .9rem; }
+    .trace-crop { position: relative; overflow: hidden; aspect-ratio: 953 / 620; }
+    .trace-crop img { position: absolute; top: 0; left: -28%; width: 167.9%; max-width: none; }
+    .trace-crop + figcaption { padding: .65rem .9rem; }
+    .points { padding-left: 1.25rem; margin-block: .8rem 0; }
+    .points li + li { margin-top: .5rem; }
+    .points li::marker { color: var(--accent); }
+    .cards { display: grid; gap: .85rem; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 1.4rem; }
+    .card { padding: 1.15rem; }
+    .card p { margin-top: .4rem; font-size: .92rem; }
+    .workspace { display: grid; gap: .6rem; padding: 1rem; }
+    .device { display: grid; gap: .2rem; padding: .7rem .85rem; border: 1px solid var(--line); border-radius: 8px; }
+    .device.active { border-color: var(--accent); }
+    .device span { color: var(--muted); font-size: .9rem; }
+    footer { padding-block: 1.15rem; font-size: .86rem; }
+    @media (max-width: 780px) {
+      .split { grid-template-columns: 1fr; gap: 1.5rem; }
+      .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 460px) {
+      .wrap { width: calc(100% - 32px); }
+      .top .wrap, nav { gap: .65rem; }
+      .cards { grid-template-columns: 1fr; }
+    }
+    @media print {
+      :root { color-scheme: light; --background: #fff; --panel: #fff; --text: #17212b; --muted: #354557; --accent: #165a4b; --line: #aab5c3; }
+      .top, .hero { position: static; background: #fff; }
+      .hero .wrap, .chapter { padding-block: 1.4rem; }
+      .primary { background: #fff; }
+      figure, .card, .workspace { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body id="top">
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="#top"><img src="assets/logo.svg" width="28" height="28" alt="">Cockpit</a>
+      <nav aria-label="页面导航">
+        <a href="#perfetto">Perfetto</a>
+        <a href="#apps">应用管理</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="title">
+      <div class="wrap">
+        <p class="label">v0.2.0 → v0.9.2 · 2026.11.02–11.17</p>
+        <h1 id="title">Cockpit 新增功能</h1>
+        <p class="lead">本期新增内嵌 Perfetto、应用管理、实时性能监控与回看、投屏录屏和多设备独立工作区。</p>
+        <div class="actions">
+          <a class="button primary" href="#perfetto">查看新增功能</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="chapter" id="perfetto" aria-labelledby="trace-title">
+      <div class="wrap split">
+        <div>
+          <h2 id="trace-title">Perfetto 与系统 Trace</h2>
+          <ul class="points">
+            <li>Android 10 及以上设备可直接录制系统 Trace，支持卡顿、应用启动、内存和功耗四种预设，可设置录制时长和缓冲区。</li>
+            <li>录完自动保存，并在内嵌 Perfetto 中打开，可查看 CPU 调度和频率等轨道。</li>
+            <li>通过 Trace 列表管理历史录制，也能打开已有的本地 Trace。查看器支持离线运行。</li>
+          </ul>
+        </div>
+        <figure class="panel">
+          <div class="trace-crop"><img src="manual/images/perfetto.jpg" width="1600" height="964" loading="lazy" alt="内嵌 Perfetto 显示 CPU 调度与频率轨道"></div>
+          <figcaption>内嵌 Perfetto 的系统 Trace 时间轴，实机截图局部。</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="chapter" id="apps" aria-labelledby="apps-title">
+      <div class="wrap split">
+        <div>
+          <h2 id="apps-title">应用管理</h2>
+          <ul class="points">
+            <li>按包名搜索，按安装或更新时间排序，可筛选用户应用、系统应用或已停用应用。</li>
+            <li>支持拖入 APK 安装，以及打开应用、清除数据、停用或启用、导出 APK 和卸载。</li>
+            <li>v0.9.1 新增运行状态标记和「运行中」筛选，可单独停止正在运行的应用。</li>
+          </ul>
+        </div>
+        <figure class="panel">
+          <a class="shot" href="manual/images/apps.jpg"><img src="manual/images/apps.jpg" width="1600" height="1046" loading="lazy" alt="应用管理窗口的包名搜索、应用分类与操作列"></a>
+          <figcaption>应用列表与 APK 操作实机截图，点击查看原图。</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="chapter" id="logs" aria-labelledby="debug-title">
+      <div class="wrap split">
+        <div>
+          <h2 id="debug-title">日志筛选、存储分析与文件传输</h2>
+          <ul class="points">
+            <li>Logcat 支持按级别、Tag、关键词或正则、包名或 PID 筛选，可导出筛选结果。</li>
+            <li>支持导出设备 Logger 日志。操作日志记录相关命令、耗时及失败原因。</li>
+            <li>存储分析可逐层查看目录占用，文件上传会分阶段显示进度与失败原因。</li>
+          </ul>
+        </div>
+        <figure class="panel">
+          <a class="shot" href="manual/images/logcat.jpg"><img src="manual/images/logcat.jpg" width="1600" height="484" loading="lazy" alt="Logcat 工具栏与按级别着色的 Android 日志"></a>
+          <figcaption>Logcat 筛选实机截图，点击查看原图。</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="chapter" aria-labelledby="perf-title">
+      <div class="wrap">
+        <h2 id="perf-title">实时性能监控</h2>
+        <div class="cards">
+          <article class="panel card"><h3>投屏负载条与应用指标</h3><p>投屏负载条显示 CPU、内存、温度和前台应用帧率。状态面板可查看卡顿帧占比、帧耗时分布和关注应用的 CPU、内存、线程变化。</p></article>
+          <article class="panel card"><h3>事件标记与阈值告警</h3><p>曲线标记投屏交互、应用切换、卡顿、崩溃和 ANR 等事件。支持跳转到事件附近、拖选放大区间和配置阈值告警。</p></article>
+          <article class="panel card"><h3>系统指标与独立状态窗口</h3><p>新增 GPU/NPU 占用、IO 等待、资源压力及温控、限频信息。设备状态面板可弹出为独立窗口。</p></article>
+        </div>
+        <p class="note" style="margin-top: .85rem">帧统计以及 GPU、NPU、温控等指标的可用性取决于设备、系统版本和驱动。</p>
+      </div>
+    </section>
+
+    <section class="chapter" aria-labelledby="record-title">
+      <div class="wrap split">
+        <div>
+          <h2 id="record-title">投屏录屏、截图编辑和数据回看</h2>
+          <ul class="points">
+            <li>投屏录屏可保存为 MP4，截图可加箭头、文字、选框或马赛克。</li>
+            <li>性能数据可独立录制和回看，按当前查看区间导出 CSV 或 JSON。</li>
+            <li>回看可选择时间区间，数据包括系统负载、关注应用指标、帧统计和事件。</li>
+          </ul>
+        </div>
+        <figure class="panel">
+          <a class="shot" href="manual/images/screenshot-edit.jpg"><img src="manual/images/screenshot-edit.jpg" width="1600" height="1079" loading="lazy" alt="Cockpit 截图编辑窗口，在 Android 设置页面上添加矩形和箭头"></a>
+          <figcaption>截图标注实机截图，点击查看原图。</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="chapter" aria-labelledby="device-title">
+      <div class="wrap split">
+        <div>
+          <h2 id="device-title">多设备工作区与终端改进</h2>
+          <p>默认单台模式下，切换设备就切换到该设备的投屏或状态页，以及该设备的 Shell 和 Logcat 标签。上一台的投屏和终端继续在后台运行，切回可接着操作。需要并排看画面时，可切换到网格模式。</p>
+          <ul class="points"><li>新增本机终端，Shell 支持上下键翻阅命令历史，新建终端入口合并到标签栏。</li></ul>
+        </div>
+        <figure class="panel workspace">
+          <figcaption>单台模式 · 切换到设备 B 后的工作区示意</figcaption>
+          <div class="device active"><strong>设备 B · 当前</strong><span>显示设备 B 的投屏或状态页，以及它的 Shell 和 Logcat 标签</span></div>
+          <div class="device"><strong>设备 A · 后台</strong><span>继续投屏、保留 Shell 与 Logcat 会话</span></div>
+        </figure>
+      </div>
+    </section>
+
+  </main>
+  <footer><div class="wrap">Cockpit · 2026 年 11 月阶段汇报</div></footer>
+</body>
+</html>
